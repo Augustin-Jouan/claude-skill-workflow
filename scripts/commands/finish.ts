@@ -61,7 +61,8 @@ async function llm(ctx: Contexte, role: 'survivants' | 'review', prompt: string,
   const { outil, modele } = CONFIG.modeles[role];
   let r: Reponse;
   try {
-    r = await appelerLlm({ outil, modele, mode: 'ask', racine: ctx.racine, prompt, fichierPrompt: join(ctx.dossier, 'llm', `fin-${nom}.md`), timeoutMs: minutes * 60_000 });
+    // La review juge le diff dans son contexte : elle lit le dépôt (la branche est committée, HEAD est l'état final).
+    r = await appelerLlm({ outil, modele, mode: 'ask', racine: ctx.racine, prompt, fichierPrompt: join(ctx.dossier, 'llm', `fin-${nom}.md`), timeoutMs: minutes * 60_000, lecture: role === 'review' });
   } catch (e) {
     terminer({ statut: 'ERREUR_OUTIL', commande: C, message: e instanceof Error ? e.message : String(e) });
   }
@@ -234,7 +235,9 @@ async function analyser(ctx: Contexte, f: FichierMutation, exigences: string[]):
   return { analyse, brut: r.texte };
 }
 
-async function mutation(ctx: Contexte, sans: boolean): Promise<{ statut: Fin['mutation']; ligne: string; section: string; testsProposes: number }> {
+// vus : survivants soumis à l'analyse, que run écrit dans survivants-vus.json une fois fin.md écrit. Un finish
+// interrompu avant (review en erreur) ne doit pas les écarter du finish suivant : leurs tests proposés n'ont pas été vus.
+async function mutation(ctx: Contexte, sans: boolean): Promise<{ statut: Fin['mutation']; ligne: string; section: string; testsProposes: number; vus?: string[] }> {
   if (sans) {
     journal(ctx, { type: 'mutation', sautee: true });
     return { statut: 'sautee', ligne: '- Mutation : ⚠️ sautée à la demande du développeur (--sans-mutation)', section: '', testsProposes: 0 };
@@ -288,9 +291,8 @@ async function mutation(ctx: Contexte, sans: boolean): Promise<{ statut: Fin['mu
   ecartes('### Survivants hors des lignes changées par la branche (non analysés)', 'horsBranche');
   ecartes("### Survivants déjà soumis lors d'une fin précédente, test non retenu (non analysés)", 'dejaProposes');
   for (const f of analyses) for (const m of f.survivants) vus.add(cleMutant(f.fichier, m));
-  writeFileSync(fichierVus, `${JSON.stringify([...vus], null, 2)}\n`);
   journal(ctx, { type: 'mutation', score, fichiers: resultats.length, survivants: total - tues, analyses: analyses.length, testsProposes });
-  return { statut: 'faite', ligne: `- Mutation : score ${score} % (${tues}/${total} mutants tués, ${resultats.length} fichier(s), Stryker ${incremental ? 'incrémental' : 'complet'})`, section: parties.join('\n\n'), testsProposes };
+  return { statut: 'faite', ligne: `- Mutation : score ${score} % (${tues}/${total} mutants tués, ${resultats.length} fichier(s), Stryker ${incremental ? 'incrémental' : 'complet'})`, section: parties.join('\n\n'), testsProposes, vus: [...vus] };
 }
 
 // --- 4 : review neuve ---
@@ -373,6 +375,7 @@ export async function run(args: string[]): Promise<void> {
     suite,
   ].filter(Boolean);
   writeFileSync(join(dossier, 'fin.md'), `${contenu.join('\n\n')}\n`);
+  if (m.vus) writeFileSync(join(dossier, 'survivants-vus.json'), `${JSON.stringify(m.vus, null, 2)}\n`);
   ecrireFin(dossier, { date: new Date().toISOString(), head: ctx.head, ok: true, mutation: m.statut, verdict: rv.verdict });
   journal(ctx, { type: 'fin', ok: true, mutation: m.statut, verdict: rv.verdict, testsProposes: m.testsProposes });
 

@@ -3,7 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
-import { argumentsCursor, commandeDeLancement, dossiersDInstallation, environnementClaude, environnementCursor, executer, lireResultat, trouverExecutable } from './llm.ts';
+import { CONFIG } from '../../config/defaults.ts';
+import { argumentsClaude, argumentsCursor, commandeDeLancement, dossiersDInstallation, environnementClaude, environnementCursor, executer, lireResultat, trouverExecutable } from './llm.ts';
 
 let dossier: string;
 before(() => {
@@ -69,7 +70,21 @@ test('arguments Cursor : écriture forcée pour l\'exécuteur, mode ask en lectu
 
 test("Claude est lancé hors de la session Claude Code qui l'appelle", () => {
   const env = environnementClaude({ CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'cli', CLAUDE_CODE_GIT_BASH_PATH: 'C:\\bash.exe', PATH: 'p' });
-  assert.deepEqual(env, { CLAUDE_CODE_GIT_BASH_PATH: 'C:\\bash.exe', PATH: 'p' });
+  assert.deepEqual(env, { CLAUDE_CODE_GIT_BASH_PATH: 'C:\\bash.exe', PATH: 'p', CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(CONFIG.seuils.sortieClaudeJetons) });
+});
+
+test("la sortie de Claude est plafonnée : une réponse qui boucle s'arrête en quelques minutes, pas à 128 000 jetons", () => {
+  assert.equal(environnementClaude({ CLAUDE_CODE_MAX_OUTPUT_TOKENS: '128000' }).CLAUDE_CODE_MAX_OUTPUT_TOKENS, String(CONFIG.seuils.sortieClaudeJetons));
+  assert.ok(CONFIG.seuils.sortieClaudeJetons <= 20_000);
+});
+
+test('Claude sans outils, ou avec les seuls outils de lecture du dépôt', () => {
+  const sans = argumentsClaude('opus', false);
+  assert.deepEqual(sans.slice(sans.indexOf('--tools'), sans.indexOf('--tools') + 2), ['--tools', '']);
+  const lecture = argumentsClaude('opus', true);
+  assert.deepEqual(lecture.slice(lecture.indexOf('--tools'), lecture.indexOf('--tools') + 2), ['--tools', 'Read,Grep,Glob']);
+  assert.ok(!lecture.some((a) => /Bash|Edit|Write|PowerShell/.test(a)));
+  assert.deepEqual(lecture.slice(lecture.indexOf('--model'), lecture.indexOf('--model') + 2), ['--model', 'opus']);
 });
 
 test("sous Windows, Cursor ne voit pas l'environnement de Git Bash : il y lancerait ses hooks PowerShell dans bash", () => {

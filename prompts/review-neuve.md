@@ -8,6 +8,8 @@ Pour chaque exigence `EX-n` :
 
 Signale aussi les écarts consignés dans DEVIATIONS.md qui te paraissent injustifiés.
 
+Le diff ne montre que les lignes changées. Le dépôt est ton dossier de travail, dans l'état final de la branche : lis avec Read, Grep et Glob le code qu'il appelle sans le montrer (fonctions existantes, tests), au lieu de supposer ce qu'il fait. N'écris pas d'appel d'outil dans ta réponse : elle ne contient que les sections ci-dessous.
+
 Réponds avec ces sections :
 
 ```markdown

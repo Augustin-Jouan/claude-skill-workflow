@@ -143,11 +143,17 @@ export function argumentsCursor(modele: string, mode: 'agent' | 'ask', racine: s
   return ['-p', '--output-format', 'stream-json', '--trust', '--workspace', racine, '--model', modele, ...droits, consigne];
 }
 
+// Sans outil, Claude qui veut lire un fichier absent du prompt écrit de faux appels d'outils, puis boucle :
+// les appels qui ont besoin du code autour du diff ont les outils de lecture, et seulement ceux-là.
+export function argumentsClaude(modele: string, lecture: boolean): string[] {
+  return ['-p', '--safe-mode', '--tools', lecture ? 'Read,Grep,Glob' : '', '--model', modele, '--output-format', 'json', '--no-session-persistence'];
+}
+
 // Un claude lancé depuis une session Claude Code se croirait imbriqué dans celle-ci.
 export function environnementClaude(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const copie = { ...env };
   for (const cle of ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_SSE_PORT']) delete copie[cle];
-  return copie;
+  return { ...copie, CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(CONFIG.seuils.sortieClaudeJetons) };
 }
 
 // Sous Windows, lancée depuis Git Bash (HOME en /c/Users/…, SHELL, MSYSTEM), la CLI Cursor exécute ses hooks
@@ -168,6 +174,8 @@ export interface Appel {
   // .workflow/llm/<nom>.md ; la réponse brute va dans <nom>.sortie.txt.
   fichierPrompt: string;
   timeoutMs: number;
+  // Claude seulement : outils de lecture du dépôt (Read, Grep, Glob). Sans, Claude n'a aucun outil.
+  lecture?: boolean;
   // Journal en direct des actions de Cursor (.workflow/cursor.log), et le titre de l'appel qui y sépare les appels.
   suivi?: { fichier: string; titre: string };
 }
@@ -213,7 +221,7 @@ export async function appelerLlm(a: Appel): Promise<Reponse> {
   const cursor = a.outil === 'cursor-agent';
   const args = cursor
     ? argumentsCursor(a.modele, a.mode, a.racine, `Lis le fichier ${a.fichierPrompt} et suis exactement ses instructions.`)
-    : ['-p', '--safe-mode', '--tools', '', '--model', a.modele, '--output-format', 'json', '--no-session-persistence'];
+    : argumentsClaude(a.modele, a.lecture ?? false);
   const surLigne = cursor && a.suivi ? suivreCursor(a.suivi, a.racine) : undefined;
   const r = await executer(commandeDeLancement(executable, args), {
     cwd: a.racine,
