@@ -34,7 +34,7 @@ import { depassement, echecsAdmis, ecrireRun, estJalon, lireRun, nouvelleTache, 
 import { binaireLocal, corrigerFichiers, detecterRunner, lancerTests, type Runner } from '../lib/runner.ts';
 import { conditionsDeSortie } from '../lib/sortie.ts';
 import { sectionsExigences } from '../lib/spec.ts';
-import { comparerSuite, echecsSuite, lancerCouverture, lancerTsc, lireQuarantaine, nouvellesErreurs } from '../lib/suite.ts';
+import { comparerSuite, consigneTypecheck, echecsSuite, lancerCouverture, lancerTsc, lireQuarantaine, nouvellesErreurs } from '../lib/suite.ts';
 import { estFichierDeTest } from '../lib/verification.ts';
 
 const C = 'run-plan';
@@ -211,6 +211,7 @@ function promptExecuteur(ctx: Contexte, t: Tache, consigne: string | null): stri
       exigences: sectionsExigences(ctx.spec, t.exigences) || t.exigences.join(', '),
       rapport_rejet: consigne ?? 'Aucun : première tentative.',
       fichiers_verrouilles: CONFIG.verrouilles.map((v) => `\`${v}\``).join(', '),
+      typecheck: consigneTypecheck(ctx.racine),
     }),
     relative(ctx.racine, ctx.dossier).replaceAll('\\', '/'),
   );

@@ -1,7 +1,23 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Rapport } from './runner.ts';
-import { comparerSuite, echecsSuite, erreursTsc, lireCouverture, lireQuarantaine, nouvellesErreurs } from './suite.ts';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { comparerSuite, consigneTypecheck, echecsSuite, erreursTsc, lireCouverture, lireQuarantaine, nouvellesErreurs } from './suite.ts';
+
+test("la consigne de typecheck de l'exécuteur donne la commande du projet, ou dit qu'il n'y en a pas", () => {
+  const racine = mkdtempSync(join(tmpdir(), 'wf-'));
+  try {
+    assert.match(consigneTypecheck(racine), /pas de typecheck/);
+    mkdirSync(join(racine, 'node_modules', 'typescript', 'bin'), { recursive: true });
+    writeFileSync(join(racine, 'node_modules', 'typescript', 'bin', 'tsc'), '');
+    writeFileSync(join(racine, 'tsconfig.json'), '{}');
+    assert.match(consigneTypecheck(racine), /`npx tsc --noEmit -p tsconfig\.json`.*tests compris/);
+  } finally {
+    rmSync(racine, { recursive: true, force: true });
+  }
+});
 
 const RAPPORT: Rapport = {
   tests: [

@@ -22,6 +22,7 @@ Tu implémentes une seule tâche d'un plan validé. Un script vérifie ton trava
 - Tu peux ajouter des tests si leur nom commence par une exigence de la tâche (`EX-n — …`).
 - Ne touche qu'aux fichiers de `fichiers_prevus`.
 - Ne commite pas : le script le fait.
+- {{typecheck}}
 
 ## Ce qui fait rejeter la tâche
 
@@ -31,6 +32,7 @@ Tu implémentes une seule tâche d'un plan validé. Un script vérifie ton trava
 - Mettre à jour un snapshot hors `tests_modifiables` ; augmenter un timeout de test.
 - Modifier un fichier verrouillé : {{fichiers_verrouilles}}.
 - Un test prévu absent, non exécuté ou en échec.
+- Une nouvelle erreur de typecheck, ou un test de la suite complète qui passait et échoue.
 
 ## Ce qui est signalé à un arbitre
 

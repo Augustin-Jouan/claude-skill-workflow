@@ -54,10 +54,22 @@ export function lireCouverture(resume: Record<string, unknown>, racine: string, 
   return fichiers.map((f) => ({ fichier: f, pct: parFichier.get(f) ?? 0 }));
 }
 
+function binaireTsc(racine: string): string | null {
+  const binaire = join(racine, 'node_modules', 'typescript', 'bin', 'tsc');
+  return existsSync(binaire) && existsSync(join(racine, 'tsconfig.json')) ? binaire : null;
+}
+
+// Consigne du prompt de l'exécuteur : le même typecheck que celui qui rejette la tâche, à lancer avant de rendre la main.
+export function consigneTypecheck(racine: string): string {
+  return binaireTsc(racine)
+    ? "Avant de rendre la main, lance `npx tsc --noEmit -p tsconfig.json` et corrige toute erreur dans les fichiers que tu as créés ou modifiés, tests compris : c'est le typecheck qui rejette la tâche."
+    : "Ce projet n'a pas de typecheck TypeScript à lancer.";
+}
+
 // Typecheck du projet avec son propre tsc, si le projet en a un. null quand il n'y en a pas.
 export function lancerTsc(racine: string): string[] | null {
-  const binaire = join(racine, 'node_modules', 'typescript', 'bin', 'tsc');
-  if (!existsSync(binaire) || !existsSync(join(racine, 'tsconfig.json'))) return null;
+  const binaire = binaireTsc(racine);
+  if (!binaire) return null;
   const r = spawnSync(process.execPath, [binaire, '--noEmit', '-p', 'tsconfig.json', '--pretty', 'false'], {
     cwd: racine,
     encoding: 'utf8',
