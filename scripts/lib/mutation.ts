@@ -58,6 +58,20 @@ export function choisirAnalyses(fichiers: FichierMutation[], fichiersFeature: st
   return { analyses, autres: parSurvivants.filter((f) => !analyses.includes(f)) };
 }
 
+// Les ids de Stryker changent d'un run à l'autre : un mutant se reconnaît à sa place et à son effet.
+export function cleMutant(fichier: string, m: Mutant): string {
+  return `${fichier}:${m.ligne}:${m.mutateur}:${m.remplacement}`;
+}
+
+// Un survivant n'est soumis à l'analyse que s'il est sur une ligne changée par la branche (le reste du fichier
+// n'est pas son travail) et s'il n'a pas déjà été soumis lors d'une fin précédente de la branche : s'il survit
+// encore, c'est que le développeur n'a pas retenu le test proposé.
+export function trierSurvivants(f: FichierMutation, lignes: ReadonlySet<number>, vus: ReadonlySet<string>): { aAnalyser: Mutant[]; horsBranche: Mutant[]; dejaProposes: Mutant[] } {
+  const horsBranche = f.survivants.filter((m) => !lignes.has(m.ligne));
+  const dejaProposes = f.survivants.filter((m) => lignes.has(m.ligne) && vus.has(cleMutant(f.fichier, m)));
+  return { aAnalyser: f.survivants.filter((m) => !horsBranche.includes(m) && !dejaProposes.includes(m)), horsBranche, dejaProposes };
+}
+
 export function formaterMutants(mutants: Mutant[]): string {
   return mutants.map((m) => `- ${m.id} · ligne ${m.ligne} · ${m.mutateur} → \`${m.remplacement}\` (${m.statut})`).join('\n');
 }

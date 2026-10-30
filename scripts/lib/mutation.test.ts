@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { choisirAnalyses, configStryker, formaterMutants, incrementalReutilisable, lireAnalyseSurvivants, lireMutants } from './mutation.ts';
+import { choisirAnalyses, cleMutant, configStryker, formaterMutants, incrementalReutilisable, lireAnalyseSurvivants, lireMutants, trierSurvivants } from './mutation.ts';
 
 const RAPPORT = {
   files: {
@@ -37,6 +37,17 @@ test('choisirAnalyses garde les fichiers feature qui ont le plus de survivants, 
   const { analyses, autres } = choisirAnalyses(fichiers, ['a.ts', 'b.ts', 'c.ts', 'd.ts'], 2);
   assert.deepEqual(analyses.map((f) => f.fichier), ['b.ts', 'c.ts']);
   assert.deepEqual(autres.map((f) => f.fichier), ['hors.ts', 'a.ts']);
+});
+
+test("trierSurvivants n'analyse que les lignes changées par la branche, et jamais deux fois le même mutant", () => {
+  const mutant = (id: string, ligne: number) => ({ id, mutateur: 'Regex', remplacement: '/x/', ligne, statut: 'Survived' });
+  const f = { fichier: 'src/texte.ts', total: 4, tues: 0, timeouts: 0, score: 0, survivants: [mutant('1', 5), mutant('2', 15), mutant('3', 22), mutant('4', 19)] };
+  // Les ids de Stryker changent d'un run à l'autre : un mutant déjà vu se reconnaît à sa place et à son effet.
+  const vus = new Set([cleMutant('src/texte.ts', mutant('autre-id', 22))]);
+  const tries = trierSurvivants(f, new Set([5, 6, 22]), vus);
+  assert.deepEqual(tries.aAnalyser.map((m) => m.id), ['1']);
+  assert.deepEqual(tries.horsBranche.map((m) => m.id), ['2', '4']);
+  assert.deepEqual(tries.dejaProposes.map((m) => m.id), ['3']);
 });
 
 test('formaterMutants donne une ligne par survivant', () => {

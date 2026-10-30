@@ -14,14 +14,14 @@ import { CONFIG } from '../../config/defaults.ts';
 import { lireArguments } from '../lib/args.ts';
 import { CODE_SOURCE } from '../lib/constat.ts';
 import { dossierWorkflow, fichiersDuDepot, git, gitBrut, racineDepot } from '../lib/depot.ts';
-import { lireChangements } from '../lib/diff.ts';
+import { lignesModifiees, lireChangements } from '../lib/diff.ts';
 import { lireEtat, type Etat } from '../lib/etat.ts';
 import { ecrireFin, lireVerdictReview, resumerJournal, type Fin } from '../lib/fin.ts';
 import { remplir } from '../lib/gabarit.ts';
 import { correspond } from '../lib/glob.ts';
 import { ajouterAuJournal } from '../lib/journal.ts';
 import { appelerLlm, commandeDeLancement, executer, type Reponse } from '../lib/llm.ts';
-import { choisirAnalyses, configStryker, formaterMutants, incrementalReutilisable, lireAnalyseSurvivants, lireMutants, type AnalyseSurvivants, type FichierMutation } from '../lib/mutation.ts';
+import { choisirAnalyses, cleMutant, configStryker, formaterMutants, incrementalReutilisable, lireAnalyseSurvivants, lireMutants, trierSurvivants, type AnalyseSurvivants, type FichierMutation } from '../lib/mutation.ts';
 import { lirePlan } from '../lib/plan.ts';
 import { terminer } from '../lib/result.ts';
 import { echecsAdmis, lireRun } from '../lib/run-etat.ts';
@@ -245,7 +245,15 @@ async function mutation(ctx: Contexte, sans: boolean): Promise<{ statut: Fin['mu
   }
   const { resultats, incremental } = await lancerStryker(ctx, fichiers);
   const features = codeDesFeatures(ctx);
-  const { analyses, autres } = choisirAnalyses(resultats, [...features.keys()], CONFIG.seuils.strykerFichiersAnalyses);
+  const lignes = lignesModifiees(gitBrut(['-c', 'core.quotePath=false', 'diff', ctx.base, ctx.head, '-U0', '--no-renames', '--no-color', '--no-ext-diff'], ctx.racine));
+  const fichierVus = join(ctx.dossier, 'survivants-vus.json');
+  const vus = new Set<string>(existsSync(fichierVus) ? (JSON.parse(readFileSync(fichierVus, 'utf8')) as string[]) : []);
+  const tries = resultats.map((f) => ({ f, ...trierSurvivants(f, lignes.get(f.fichier) ?? new Set(), vus) }));
+  const { analyses, autres } = choisirAnalyses(
+    tries.map(({ f, aAnalyser }) => ({ ...f, survivants: aAnalyser })),
+    [...features.keys()],
+    CONFIG.seuils.strykerFichiersAnalyses,
+  );
 
   const total = resultats.reduce((s, f) => s + f.total, 0);
   const tues = resultats.reduce((s, f) => s + f.tues, 0);
@@ -273,6 +281,14 @@ async function mutation(ctx: Contexte, sans: boolean): Promise<{ statut: Fin['mu
   if (autres.length > 0) {
     parties.push('### Autres survivants (non analysés)', ...autres.map((f) => `#### ${f.fichier}\n${formaterMutants(f.survivants)}`));
   }
+  const ecartes = (titre: string, cle: 'horsBranche' | 'dejaProposes') => {
+    const avec = tries.filter((t) => t[cle].length > 0);
+    if (avec.length > 0) parties.push(titre, ...avec.map((t) => `#### ${t.f.fichier}\n${formaterMutants(t[cle])}`));
+  };
+  ecartes('### Survivants hors des lignes changées par la branche (non analysés)', 'horsBranche');
+  ecartes("### Survivants déjà soumis lors d'une fin précédente, test non retenu (non analysés)", 'dejaProposes');
+  for (const f of analyses) for (const m of f.survivants) vus.add(cleMutant(f.fichier, m));
+  writeFileSync(fichierVus, `${JSON.stringify([...vus], null, 2)}\n`);
   journal(ctx, { type: 'mutation', score, fichiers: resultats.length, survivants: total - tues, analyses: analyses.length, testsProposes });
   return { statut: 'faite', ligne: `- Mutation : score ${score} % (${tues}/${total} mutants tués, ${resultats.length} fichier(s), Stryker ${incremental ? 'incrémental' : 'complet'})`, section: parties.join('\n\n'), testsProposes };
 }
