@@ -48,6 +48,7 @@ function decrire(l: Ligne): string | null {
       return `Phase manuelle ${l.phase} : ${l.minutes} min`;
     case 'mutation':
       if (l.sautee) return 'Mutation sautée (--sans-mutation)';
+      if (l.reprise) return 'Mutation et analyse des survivants reprises du finish précédent (même commit)';
       if (l.score !== undefined) return `Mutation : score ${l.score} %, ${l.survivants} survivant(s), ${l.testsProposes} test(s) proposé(s)`;
       return `Stryker : ${minutes(l.dureeMs)} min${l.code !== 0 ? `, code ${l.code}` : ''}${l.depasse ? ', délai dépassé' : ''}`;
     case 'review':

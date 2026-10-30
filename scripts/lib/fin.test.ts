@@ -1,6 +1,33 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
-import { conditionsFin, lireVerdictReview, resumerJournal } from './fin.ts';
+import { conditionsFin, ecrireMutationFaite, lireMutationFaite, lireVerdictReview, mutationReutilisable, oublierMutationFaite, resumerJournal, type MutationFaite } from './fin.ts';
+
+const faite: MutationFaite = { head: 'abc', sans: false, statut: 'faite', ligne: '- Mutation : score 87 %', section: '## Mutation testing', testsProposes: 5, vus: ['src/a.ts:1'] };
+
+test("un finish interrompu après la mutation (review en erreur) la réutilise sur le même commit, sans relancer l'analyse", () => {
+  assert.equal(mutationReutilisable(faite, 'abc', false), true);
+  assert.equal(mutationReutilisable(faite, 'def', false), false, 'le commit a changé');
+  assert.equal(mutationReutilisable(faite, 'abc', true), false, '--sans-mutation demandé cette fois');
+  assert.equal(mutationReutilisable({ ...faite, sans: true, statut: 'sautee' }, 'abc', false), false, 'mutation sautée la dernière fois');
+  assert.equal(mutationReutilisable(null, 'abc', false), false);
+});
+
+test('la mutation faite est gardée dans .workflow/ jusqu’à ce que fin.md soit écrit', () => {
+  const dossier = mkdtempSync(join(tmpdir(), 'wf-fin-'));
+  try {
+    assert.equal(lireMutationFaite(dossier), null);
+    ecrireMutationFaite(dossier, faite);
+    assert.deepEqual(lireMutationFaite(dossier), faite);
+    oublierMutationFaite(dossier);
+    assert.equal(lireMutationFaite(dossier), null);
+    oublierMutationFaite(dossier);
+  } finally {
+    rmSync(dossier, { recursive: true, force: true });
+  }
+});
 
 test('lireVerdictReview lit la ligne qui suit « ## Verdict »', () => {
   assert.equal(lireVerdictReview('## Verdict\nécarts mineurs\n\n## Écarts\n…'), 'écarts mineurs');

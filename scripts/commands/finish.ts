@@ -16,7 +16,7 @@ import { CODE_SOURCE } from '../lib/constat.ts';
 import { dossierWorkflow, fichiersDuDepot, git, gitBrut, racineDepot } from '../lib/depot.ts';
 import { lignesModifiees, lireChangements } from '../lib/diff.ts';
 import { lireEtat, type Etat } from '../lib/etat.ts';
-import { ecrireFin, lireVerdictReview, resumerJournal, type Fin } from '../lib/fin.ts';
+import { ecrireFin, ecrireMutationFaite, lireMutationFaite, lireVerdictReview, mutationReutilisable, oublierMutationFaite, resumerJournal, type Fin, type MutationFaite } from '../lib/fin.ts';
 import { remplir } from '../lib/gabarit.ts';
 import { correspond } from '../lib/glob.ts';
 import { ajouterAuJournal } from '../lib/journal.ts';
@@ -353,7 +353,17 @@ export async function run(args: string[]): Promise<void> {
     });
   }
 
-  const m = await mutation(ctx, Boolean(lireArguments(args).options['sans-mutation']));
+  const sans = Boolean(lireArguments(args).options['sans-mutation']);
+  const deja = lireMutationFaite(dossier);
+  let m: MutationFaite;
+  if (deja && mutationReutilisable(deja, ctx.head, sans)) {
+    afficher('Mutation et analyse des survivants reprises du finish précédent, arrêté avant fin.md (même commit).');
+    journal(ctx, { type: 'mutation', reprise: true });
+    m = deja;
+  } else {
+    m = { head: ctx.head, sans, ...(await mutation(ctx, sans)) };
+    ecrireMutationFaite(dossier, m);
+  }
   const rv = await review(ctx);
   const journalBrut = existsSync(join(dossier, 'journal.jsonl')) ? readFileSync(join(dossier, 'journal.jsonl'), 'utf8') : '';
   const lignesJournal = journalBrut.split(/\r?\n/).filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>);
@@ -376,6 +386,7 @@ export async function run(args: string[]): Promise<void> {
   ].filter(Boolean);
   writeFileSync(join(dossier, 'fin.md'), `${contenu.join('\n\n')}\n`);
   if (m.vus) writeFileSync(join(dossier, 'survivants-vus.json'), `${JSON.stringify(m.vus, null, 2)}\n`);
+  oublierMutationFaite(dossier);
   ecrireFin(dossier, { date: new Date().toISOString(), head: ctx.head, ok: true, mutation: m.statut, verdict: rv.verdict });
   journal(ctx, { type: 'fin', ok: true, mutation: m.statut, verdict: rv.verdict, testsProposes: m.testsProposes });
 

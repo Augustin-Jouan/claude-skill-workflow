@@ -72,6 +72,8 @@ Budgets (`config/defaults.ts`) : minutes par tâche (30), minutes et appels LLM 
 
 `--sans-mutation` saute les étapes 2 et 3, et `fin.md` le signale.
 
+Un `finish` arrêté après les étapes 2 et 3 (review en erreur, délai dépassé) garde leur résultat dans `.workflow/fin-mutation.json`. Relancé sur le même commit, avec la même option, il le reprend et ne repasse que la review : l'analyse des survivants coûte des appels LLM et ne propose pas deux fois les mêmes tests. Le fichier est effacé une fois `fin.md` écrit.
+
 Stryker garde ses résultats d'un run à l'autre (`.workflow/stryker-incremental.json`) seulement si, depuis le commit du run précédent (`.workflow/stryker-incremental.commit`), seuls des fichiers mutés ont changé. Avec `testRunner: command`, il ne voit pas les tests : un test ajouté depuis ne serait pas pris en compte. Sinon le run est complet ; `fin.md` dit lequel des deux a tourné.
 
 Le résumé du journal compte les appels LLM lancés par les scripts et leurs jetons, par outil (Cursor, Claude). La session Claude qui pilote le workflow n'y est pas comptée.

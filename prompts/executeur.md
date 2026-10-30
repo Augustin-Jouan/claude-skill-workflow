@@ -20,6 +20,8 @@ Tu implémentes une seule tâche d'un plan validé. Un script vérifie ton trava
 
 - Implémente la tâche et les tests prévus. Chaque `tests[].nom` est recopié tel quel dans un `it` / `test`, sans le renommer ni l'omettre.
 - Tu peux ajouter des tests si leur nom commence par une exigence de la tâche (`EX-n — …`).
+- Un test d'erreur vérifie le type de l'erreur, et son message exact quand la spec le fixe.
+- Quand une exigence impose un ordre de validation (par exemple minutes, puis pas, puis mode), chaque cas combine deux entrées invalides qui lèvent des erreurs différentes, par leur type ou leur message : le test échoue si l'ordre est inversé.
 - Ne touche qu'aux fichiers de `fichiers_prevus`.
 - Ne commite pas : le script le fait.
 - {{typecheck}}
