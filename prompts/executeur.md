@@ -20,7 +20,7 @@ Tu implémentes une seule tâche d'un plan validé. Un script vérifie ton trava
 
 - Implémente la tâche et les tests prévus. Chaque `tests[].nom` est recopié tel quel dans un `it` / `test`, sans le renommer ni l'omettre.
 - Tu peux ajouter des tests si leur nom commence par une exigence de la tâche (`EX-n — …`).
-- Un test d'erreur vérifie le type de l'erreur, et son message exact quand la spec le fixe.
+- Un test d'erreur vérifie le type de l'erreur, et son message exact quand la spec le fixe. `toThrow('…')` ne vérifie qu'une partie du message : vérifie le type avec `toThrow(SyntaxError)` et le message exact avec une regex ancrée `toThrow(/^…$/)`, caractères spéciaux échappés.
 - Quand une exigence impose un ordre de validation (par exemple minutes, puis pas, puis mode), chaque cas combine deux entrées invalides qui lèvent des erreurs différentes, par leur type ou leur message : le test échoue si l'ordre est inversé.
 - Choisis des entrées qu'une implémentation fausse ne passerait pas :
   - une borne numérique : teste la valeur limite acceptée et la première valeur refusée ;

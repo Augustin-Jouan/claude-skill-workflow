@@ -16,7 +16,7 @@ import { CODE_SOURCE } from '../lib/constat.ts';
 import { dossierWorkflow, fichiersDuDepot, git, gitBrut, racineDepot } from '../lib/depot.ts';
 import { lignesModifiees, lireChangements } from '../lib/diff.ts';
 import { lireEtat, type Etat } from '../lib/etat.ts';
-import { ecrireFin, ecrireMutationFaite, lireMutationFaite, lireVerdictReview, mutationReutilisable, oublierMutationFaite, resumerJournal, type Fin, type MutationFaite } from '../lib/fin.ts';
+import { ecrireFin, ecrireMutationFaite, ligneCouverture, lireMutationFaite, lireVerdictReview, mutationReutilisable, oublierMutationFaite, resumerJournal, suiteDeLaMutation, type Fin, type MutationFaite, type SansAnalyse } from '../lib/fin.ts';
 import { remplir } from '../lib/gabarit.ts';
 import { correspond } from '../lib/glob.ts';
 import { ajouterAuJournal } from '../lib/journal.ts';
@@ -237,7 +237,7 @@ async function analyser(ctx: Contexte, f: FichierMutation, exigences: string[]):
 
 // vus : survivants soumis à l'analyse, que run écrit dans survivants-vus.json une fois fin.md écrit. Un finish
 // interrompu avant (review en erreur) ne doit pas les écarter du finish suivant : leurs tests proposés n'ont pas été vus.
-async function mutation(ctx: Contexte, sans: boolean): Promise<{ statut: Fin['mutation']; ligne: string; section: string; testsProposes: number; vus?: string[] }> {
+async function mutation(ctx: Contexte, sans: boolean): Promise<{ statut: Fin['mutation']; ligne: string; section: string; testsProposes: number; vus?: string[]; sansAnalyse?: SansAnalyse }> {
   if (sans) {
     journal(ctx, { type: 'mutation', sautee: true });
     return { statut: 'sautee', ligne: '- Mutation : ⚠️ sautée à la demande du développeur (--sans-mutation)', section: '', testsProposes: 0 };
@@ -291,8 +291,9 @@ async function mutation(ctx: Contexte, sans: boolean): Promise<{ statut: Fin['mu
   ecartes('### Survivants hors des lignes changées par la branche (non analysés)', 'horsBranche');
   ecartes("### Survivants déjà soumis lors d'une fin précédente, test non retenu (non analysés)", 'dejaProposes');
   for (const f of analyses) for (const m of f.survivants) vus.add(cleMutant(f.fichier, m));
-  journal(ctx, { type: 'mutation', score, fichiers: resultats.length, survivants: total - tues, analyses: analyses.length, testsProposes });
-  return { statut: 'faite', ligne: `- Mutation : score ${score} % (${tues}/${total} mutants tués, ${resultats.length} fichier(s), Stryker ${incremental ? 'incrémental' : 'complet'})`, section: parties.join('\n\n'), testsProposes, vus: [...vus] };
+  const sansAnalyse: SansAnalyse | undefined = analyses.length > 0 ? undefined : features.size === 0 ? 'aucune-feature' : 'aucun-survivant';
+  journal(ctx, { type: 'mutation', score, fichiers: resultats.length, survivants: total - tues, analyses: analyses.length, testsProposes, sansAnalyse });
+  return { statut: 'faite', ligne: `- Mutation : score ${score} % (${tues}/${total} mutants tués, ${resultats.length} fichier(s), Stryker ${incremental ? 'incrémental' : 'complet'})`, section: parties.join('\n\n'), testsProposes, vus: [...vus], sansAnalyse };
 }
 
 // --- 4 : review neuve ---
@@ -367,22 +368,19 @@ export async function run(args: string[]): Promise<void> {
   const rv = await review(ctx);
   const journalBrut = existsSync(join(dossier, 'journal.jsonl')) ? readFileSync(join(dossier, 'journal.jsonl'), 'utf8') : '';
   const lignesJournal = journalBrut.split(/\r?\n/).filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>);
-  const suite =
-    m.testsProposes > 0
-      ? `L'analyse des survivants propose ${m.testsProposes} test(s). Pour les ajouter : une tâche feature (comportement_existant: true) au plan, via « wf state revenir plan », puis check-plan, matrice, run-plan et un nouveau finish.`
-      : 'Aucun test proposé par l\'analyse des survivants.';
+  const couverture = ligneCouverture(lignesJournal);
 
   const contenu = [
     entete,
     '## Contrôles',
-    [...lignes, m.ligne, `- Review neuve : ${rv.verdict ?? 'verdict illisible (voir ci-dessous)'}`].join('\n'),
+    [...lignes, ...(couverture ? [couverture] : []), m.ligne, `- Review neuve : ${rv.verdict ?? 'verdict illisible (voir ci-dessous)'}`].join('\n'),
     m.section,
     `## Review neuve (${CONFIG.modeles.review.outil}, ${CONFIG.modeles.review.modele})`,
     rv.texte.trim(),
     '## Journal',
     resumerJournal(lignesJournal, Object.fromEntries(Object.entries(CONFIG.modeles).map(([role, m]) => [role, m.outil]))),
     '## Suite',
-    suite,
+    suiteDeLaMutation(m),
   ].filter(Boolean);
   writeFileSync(join(dossier, 'fin.md'), `${contenu.join('\n\n')}\n`);
   if (m.vus) writeFileSync(join(dossier, 'survivants-vus.json'), `${JSON.stringify(m.vus, null, 2)}\n`);

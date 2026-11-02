@@ -42,6 +42,21 @@ test("une mutation reprise d'un finish interrompu est un fait du bilan, pas un S
   assert.deepEqual(ev.map((e) => e.texte), ['Mutation et analyse des survivants reprises du finish précédent (même commit)']);
 });
 
+test("le bilan sait qu'une analyse des survivants non lancée n'a rien pu proposer, et voit la couverture des refactor", () => {
+  const ev = evenementsBilan({
+    journal: [
+      { type: 'couverture', tache: 'T1', seuil: 80, fichiers: [{ fichier: 'src/duree.ts', pct: 100 }] },
+      { type: 'mutation', score: 87, survivants: 37, analyses: 0, testsProposes: 0, sansAnalyse: 'aucune-feature' },
+    ],
+    historique: [],
+    deviations: '',
+  });
+  assert.deepEqual(ev.map((e) => e.texte), [
+    'T1 · couverture avant refactor : src/duree.ts 100 % (seuil 80 %)',
+    "Mutation : score 87 %, 37 survivant(s), analyse des survivants non lancée (la branche n'a aucune tâche feature)",
+  ]);
+});
+
 const REPONSE = [
   '```yaml',
   'suggestions:',

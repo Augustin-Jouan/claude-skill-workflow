@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { conditionsFin, ecrireMutationFaite, lireMutationFaite, lireVerdictReview, mutationReutilisable, oublierMutationFaite, resumerJournal, type MutationFaite } from './fin.ts';
+import { conditionsFin, ecrireMutationFaite, ligneCouverture, lireMutationFaite, lireVerdictReview, mutationReutilisable, oublierMutationFaite, resumerJournal, suiteDeLaMutation, type MutationFaite } from './fin.ts';
 
 const faite: MutationFaite = { head: 'abc', sans: false, statut: 'faite', ligne: '- Mutation : score 87 %', section: '## Mutation testing', testsProposes: 5, vus: ['src/a.ts:1'] };
 
@@ -88,4 +88,24 @@ test('resumerJournal liste le modèle Cursor choisi à chaque appel, avec sa rai
   assert.match(md, /audit spec · lourd \(spec de 8 exigence\(s\)\) · 6 min/);
   assert.match(md, /T1 tentative 2 · lourd \(escalade après 1 rejet\(s\)\) · 4 min/);
   assert.doesNotMatch(md, /review ·/);
+});
+
+test("la suite de fin.md dit pourquoi l'analyse des survivants n'a pas tourné, au lieu d'annoncer « aucun test proposé »", () => {
+  const m = (autres: Partial<MutationFaite>) => suiteDeLaMutation({ ...faite, testsProposes: 0, ...autres });
+  assert.match(m({ testsProposes: 3 }), /propose 3 test\(s\)/);
+  assert.match(m({ sansAnalyse: 'aucune-feature' }), /non lancée : la branche n'a aucune tâche feature/);
+  assert.match(m({ sansAnalyse: 'aucun-survivant' }), /non lancée : aucun survivant/);
+  assert.match(m({ statut: 'sautee' }), /non lancée : mutation sautée/);
+  assert.match(m({ statut: 'aucun-fichier' }), /non lancée : aucun fichier de code/);
+  assert.equal(m({}), "Aucun test proposé par l'analyse des survivants.");
+});
+
+test('la couverture mesurée avant chaque refactor devient une ligne des contrôles de fin.md', () => {
+  const ligne = ligneCouverture([
+    { type: 'couverture', tache: 'T1', seuil: 80, fichiers: [{ fichier: 'src/duree.ts', pct: 100 }] },
+    { type: 'tache', tache: 'T1' },
+    { type: 'couverture', tache: 'T2', seuil: 80, fichiers: [{ fichier: 'src/duree.ts', pct: 98.5 }, { fichier: 'src/texte.ts', pct: 72 }] },
+  ]);
+  assert.equal(ligne, '- Couverture avant refactor (lignes, seuil 80 %) : T1 src/duree.ts 100 % ; T2 src/duree.ts 98.5 %, src/texte.ts 72 %');
+  assert.equal(ligneCouverture([{ type: 'tache', tache: 'T1' }]), null);
 });

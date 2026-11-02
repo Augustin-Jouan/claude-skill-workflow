@@ -4,6 +4,7 @@
 
 import { parse } from 'yaml';
 import { ETAPES, type Transition } from './etat.ts';
+import { RAISONS_SANS_ANALYSE, type SansAnalyse } from './fin.ts';
 
 export interface Evenement {
   id: string;
@@ -34,6 +35,10 @@ function decrire(l: Ligne): string | null {
       return `${qui} · tranché par le développeur (${l.motif})`;
     case 'remontee':
       return `${qui} · remontée de l'exécuteur (${l.remontee})`;
+    case 'couverture': {
+      const fichiers = (l.fichiers as Array<{ fichier: string; pct: number }>).map((f) => `${f.fichier} ${f.pct} %`).join(', ');
+      return `${qui} · couverture avant refactor : ${fichiers} (seuil ${l.seuil} %)`;
+    }
     case 'instable':
       return `${qui} · test instable : ${l.test}`;
     case 'arbitrage':
@@ -49,6 +54,9 @@ function decrire(l: Ligne): string | null {
     case 'mutation':
       if (l.sautee) return 'Mutation sautée (--sans-mutation)';
       if (l.reprise) return 'Mutation et analyse des survivants reprises du finish précédent (même commit)';
+      if (l.score !== undefined && l.sansAnalyse) {
+        return `Mutation : score ${l.score} %, ${l.survivants} survivant(s), analyse des survivants non lancée (${RAISONS_SANS_ANALYSE[l.sansAnalyse as SansAnalyse]})`;
+      }
       if (l.score !== undefined) return `Mutation : score ${l.score} %, ${l.survivants} survivant(s), ${l.testsProposes} test(s) proposé(s)`;
       return `Stryker : ${minutes(l.dureeMs)} min${l.code !== 0 ? `, code ${l.code}` : ''}${l.depasse ? ', délai dépassé' : ''}`;
     case 'review':

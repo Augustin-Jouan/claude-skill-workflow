@@ -32,6 +32,36 @@ export interface MutationFaite {
   section: string;
   testsProposes: number;
   vus?: string[];
+  sansAnalyse?: SansAnalyse;
+}
+
+// Pourquoi une mutation faite n'a donné lieu à aucune analyse LLM des survivants.
+export type SansAnalyse = 'aucune-feature' | 'aucun-survivant';
+
+export const RAISONS_SANS_ANALYSE: Record<SansAnalyse, string> = {
+  'aucune-feature': "la branche n'a aucune tâche feature",
+  'aucun-survivant': 'aucun survivant nouveau sur les lignes changées du code des tâches feature',
+};
+
+// Une branche de refactor seul ne doit pas lire « aucun test proposé » : l'analyse n'a pas tourné.
+export function suiteDeLaMutation(m: Pick<MutationFaite, 'statut' | 'testsProposes' | 'sansAnalyse'>): string {
+  if (m.testsProposes > 0) {
+    return `L'analyse des survivants propose ${m.testsProposes} test(s). Pour les ajouter : une tâche feature (comportement_existant: true) au plan, via « wf state revenir plan », puis check-plan, matrice, run-plan et un nouveau finish.`;
+  }
+  if (m.statut === 'sautee') return 'Analyse des survivants non lancée : mutation sautée (--sans-mutation).';
+  if (m.statut === 'aucun-fichier') return 'Analyse des survivants non lancée : aucun fichier de code changé par la branche.';
+  if (m.sansAnalyse) return `Analyse des survivants non lancée : ${RAISONS_SANS_ANALYSE[m.sansAnalyse]}.`;
+  return "Aucun test proposé par l'analyse des survivants.";
+}
+
+// Couverture mesurée par run-plan avant chaque tâche refactor ; la dernière mesure de chaque tâche compte.
+export function ligneCouverture(lignes: Ligne[]): string | null {
+  const parTache = new Map<string, Ligne>();
+  for (const l of lignes) if (l.type === 'couverture') parTache.set(String(l.tache), l);
+  if (parTache.size === 0) return null;
+  const mesures = [...parTache.values()];
+  const detail = mesures.map((l) => `${l.tache} ${(l.fichiers as Array<{ fichier: string; pct: number }>).map((f) => `${f.fichier} ${f.pct} %`).join(', ')}`);
+  return `- Couverture avant refactor (lignes, seuil ${mesures[0].seuil} %) : ${detail.join(' ; ')}`;
 }
 
 const MUTATION_FAITE = 'fin-mutation.json';

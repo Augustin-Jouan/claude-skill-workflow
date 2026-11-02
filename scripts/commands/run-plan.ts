@@ -412,6 +412,7 @@ function verifierCouverture(ctx: Contexte, t: Tache): void {
     if (!couverture) {
       poser(ctx, { tache: t.id, motif: 'couverture', question: `Impossible de mesurer la couverture de ${t.id} (refactor) : le projet n'a pas de fournisseur de couverture pour ${ctx.runner}. Réponds pour continuer sans cette mesure, ou ajoute le fournisseur au projet.` });
     }
+    journal(ctx, { type: 'couverture', tache: t.id, seuil, fichiers: couverture });
     const sous = couverture.filter((c) => c.pct < seuil);
     if (sous.length > 0) {
       const liste = sous.map((c) => `- ${c.fichier} : ${c.pct} %`).join('\n');
