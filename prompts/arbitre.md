@@ -18,6 +18,8 @@ Motif de l'appel : {{motif}}
 
 {{extraits_diff}}
 
+Les extraits ne montrent que les lignes changées. Le dépôt est ton dossier de travail, dans l'état laissé par l'exécuteur : lis avec Read, Grep et Glob le code et les tests cités par le rapport, au lieu de supposer leur contenu. N'écris pas d'appel d'outil dans ta réponse : elle ne contient que le JSON ci-dessous.
+
 ## Ta décision
 
 - `accepter` : chaque signalement est justifié dans ce contexte.

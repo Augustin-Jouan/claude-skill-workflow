@@ -383,6 +383,8 @@ async function arbitrer(ctx: Contexte, t: Tache, motif: MotifArbitre, rapport: s
       prompt,
       fichierPrompt: join(ctx.dossier, 'llm', `${t.id}-${ctx.run.taches[t.id].tentatives}-arbitre-${motif}.md`),
       timeoutMs: CONFIG.seuils.arbitreMinutes * 60_000,
+      // Sans outil, l'arbitre qui veut lire un test cité par la remontée tourne à vide jusqu'au plafond de sortie.
+      lecture: true,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
