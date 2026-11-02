@@ -26,7 +26,7 @@ import { appelerLlm } from '../lib/llm.ts';
 import { modeleExecuteur } from '../lib/modeles.ts';
 import { apresArbitre, apresVerdict, appliquerReponse, type Action, type MotifArbitre, type Verdict } from '../lib/orchestration.ts';
 import { lirePlan, type Tache } from '../lib/plan.ts';
-import { photographier, restaurer, type Zone } from '../lib/protection.ts';
+import { photographier, restaurer, zonesProtegees } from '../lib/protection.ts';
 import { ordreTaches } from '../lib/regles-plan.ts';
 import { lireDecision, lireRemontee, type Decision } from '../lib/reponses-llm.ts';
 import { localiser, terminer, type Resultat } from '../lib/result.ts';
@@ -195,13 +195,6 @@ function etablirReference(ctx: Contexte): void {
 
 // --- Une tentative ---
 
-function zonesProtegees(dossier: string): Zone[] {
-  return [
-    { dossier, exclus: ['DEVIATIONS.md', 'llm', 'rouge', 'bisect', 'run.lock', 'cursor.log'] },
-    { dossier: SKILL, exclus: ['node_modules'] },
-  ];
-}
-
 // localiser : le prompt nomme .workflow/DEVIATIONS.md, qui vit dans le dossier de la branche.
 function promptExecuteur(ctx: Contexte, t: Tache, consigne: string | null): string {
   return localiser(
@@ -243,7 +236,7 @@ async function tentative(ctx: Contexte, t: Tache): Promise<Verdict> {
   const { modele, raison } = modeleExecuteur(t.difficulte, et.rejets);
   afficher(`${id} : tentative ${numero} de l'exécuteur (${modele}, ${raison}). Suivi en direct : « wf suivre ».`);
 
-  const zones = zonesProtegees(ctx.dossier);
+  const zones = zonesProtegees(ctx.dossier, SKILL);
   const photo = photographier(zones);
   const headAvant = git(['rev-parse', 'HEAD'], ctx.racine);
   const debut = Date.now();
@@ -272,7 +265,7 @@ async function tentative(ctx: Contexte, t: Tache): Promise<Verdict> {
   journal(ctx, { type: 'llm', role: 'executeur', modele, raison, tache: id, tentative: numero, dureeMs: reponse.dureeMs, tokens: reponse.tokens, erreur: reponse.erreur || null });
 
   const bloquants: string[] = modifies.map(
-    (f) => `- [fichier-workflow-modifie] ${cheminLisible(ctx.racine, f)} — fichier du workflow ou du skill modifié par l'exécuteur : remis en place.`,
+    (f) => `- [fichier-workflow-modifie] ${cheminLisible(ctx.racine, f)} — fichier du workflow ou du skill modifié pendant l'appel de l'exécuteur (par lui, ou par un autre processus) : remis en place.`,
   );
   const headApres = git(['rev-parse', 'HEAD'], ctx.racine);
   if (headApres !== headAvant) {

@@ -32,6 +32,15 @@ function fichiers(zone: Zone): string[] {
   return resultat;
 }
 
+// dossier : .workflow/ de la branche ; skill : le dossier du skill. Son .git n'est pas protégé : un commit
+// ou un pull du skill pendant l'appel de l'exécuteur était défait, objets git effacés compris.
+export function zonesProtegees(dossier: string, skill: string): Zone[] {
+  return [
+    { dossier, exclus: ['DEVIATIONS.md', 'llm', 'rouge', 'bisect', 'run.lock', 'cursor.log'] },
+    { dossier: skill, exclus: ['node_modules', '.git'] },
+  ];
+}
+
 export function photographier(zones: Zone[]): Photo {
   return new Map(zones.flatMap(fichiers).map((f) => [f, readFileSync(f)]));
 }
