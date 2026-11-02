@@ -22,6 +22,11 @@ Tu implémentes une seule tâche d'un plan validé. Un script vérifie ton trava
 - Tu peux ajouter des tests si leur nom commence par une exigence de la tâche (`EX-n — …`).
 - Un test d'erreur vérifie le type de l'erreur, et son message exact quand la spec le fixe.
 - Quand une exigence impose un ordre de validation (par exemple minutes, puis pas, puis mode), chaque cas combine deux entrées invalides qui lèvent des erreurs différentes, par leur type ou leur message : le test échoue si l'ordre est inversé.
+- Choisis des entrées qu'une implémentation fausse ne passerait pas :
+  - une borne numérique : teste la valeur limite acceptée et la première valeur refusée ;
+  - un ordre ou un tri imposé : donne une entrée dans le désordre et compare le tableau entier (`toEqual`), pas un élément retrouvé par `find` ;
+  - un calcul dont l'ordre des opérations compte (cumuler puis arrondir, par exemple) : prends des valeurs dont le résultat change avec l'ordre, comme 7 + 7 au pas de 15, qui donne 15 et non 0 ;
+  - le titre d'un test ne cite que des cas que ses entrées contiennent vraiment.
 - Ne touche qu'aux fichiers de `fichiers_prevus`.
 - Ne commite pas : le script le fait.
 - {{typecheck}}

@@ -75,7 +75,10 @@ test("Claude est lancé hors de la session Claude Code qui l'appelle", () => {
 
 test("la sortie de Claude est plafonnée : une réponse qui boucle s'arrête en quelques minutes, pas à 128 000 jetons", () => {
   assert.equal(environnementClaude({ CLAUDE_CODE_MAX_OUTPUT_TOKENS: '128000' }).CLAUDE_CODE_MAX_OUTPUT_TOKENS, String(CONFIG.seuils.sortieClaudeJetons));
-  assert.ok(CONFIG.seuils.sortieClaudeJetons <= 20_000);
+  assert.ok(CONFIG.seuils.sortieClaudeJetons <= 40_000);
+  // La réflexion compte dans le plafond : une analyse des survivants a pris 17 455 jetons. Au-delà du plafond, la CLI
+  // relance le modèle et ne rend que la suite, sans le début du bloc YAML.
+  assert.ok(CONFIG.seuils.sortieClaudeJetons >= 30_000);
 });
 
 test('Claude sans outils, ou avec les seuls outils de lecture du dépôt', () => {

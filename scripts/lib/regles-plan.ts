@@ -32,6 +32,10 @@ export function verifierPlan(spec: Exigence[], plan: Plan, parcoursEtat: Parcour
       if (!ex || !t.exigences.includes(ex)) {
         v('nom-test', `${t.id} : « ${test.nom} » doit commencer par « EX-n — » avec une exigence de la tâche (${t.exigences.join(', ') || 'aucune'}).`, t.id);
       }
+      // Recopié dans une chaîne JS, « \r\n » devient un vrai retour à la ligne : le test n'est plus retrouvé par son nom.
+      if (test.nom.includes('\\')) {
+        v('nom-echappement', `${t.id} : « ${test.nom} » contient « \\ ». Écris le caractère en mots (CRLF, LF, tabulation…), sans séquence d'échappement.`, t.id);
+      }
     }
     for (const m of t.tests_modifiables) {
       if (m.raison.trim() === '') v('raison-manquante', `${t.id} : ${m.fichier} est modifiable sans raison.`, t.id);

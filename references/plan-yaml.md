@@ -66,6 +66,7 @@ Chaque violation est préfixée par le nom de sa règle. Il échoue si :
 - `[tests-manquants]` une tâche `feature` ou `fix` n'a pas de `tests` ;
 - `[fix-sans-regression]` une tâche `fix` n'a aucun test avec `comportement_existant: false` ;
 - `[nom-test]` un nom de test ne commence pas par `EX-n — ` avec une exigence de sa tâche ;
+- `[nom-echappement]` un nom de test contient `\` : recopié dans une chaîne JS, `\r\n` deviendrait un vrai retour à la ligne et le test ne serait plus retrouvé. Écris le caractère en mots (CRLF, LF, tabulation) ;
 - `[nom-duplique]` deux tests prévus portent le même nom (casse, espaces et tirets `-` `–` `—` confondus) ;
 - `[raison-manquante]` une entrée de `tests_modifiables` n'a pas de raison ;
 - `[dependance-inconnue]` / `[cycle]` un `depends_on` cite une tâche inexistante ou crée un cycle ;

@@ -104,6 +104,12 @@ test("signale un test dont le nom ne commence pas par une exigence de la tâche"
   assert.ok(regles(plan([sansExigence, t2])).includes('nom-test'));
 });
 
+test("refuse une barre oblique inverse dans un nom de test : recopiée dans une chaîne JS, « \\r\\n » devient un vrai retour à la ligne", () => {
+  const nom = (n: string) => plan([tache('T1', { tests: [{ nom: n, assertions: ['ok'], comportement_existant: false }] }), tache('T2', { exigences: ['EX-2'], e2e: true })]);
+  assert.deepEqual(regles(nom('EX-1 — découpe sur \\r\\n et \\n')), ['nom-echappement']);
+  assert.deepEqual(regles(nom('EX-1 — découpe sur CRLF, LF et CR')), []);
+});
+
 test('règle E2E : exigée en complet, sans dérogation possible', () => {
   const sansE2e = [tache('T1'), tache('T2', { exigences: ['EX-2'] })];
   assert.deepEqual(regles(plan(sansE2e, 'complet')), ['e2e']);

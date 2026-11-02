@@ -36,9 +36,10 @@ export const CONFIG = {
     reviewMinutes: 15,
     mutationMinutes: 60,
     bilanMinutes: 10,
-    // Plafond de sortie d'une requête Claude (réponses réelles : 6 300 jetons au plus). Sans lui, une réponse qui
-    // boucle (lignes vides à l'infini) court jusqu'à 128 000 jetons, environ 14 min, et fait dépasser le délai.
-    sortieClaudeJetons: 16_000,
+    // Plafond de sortie d'une requête Claude, réflexion comprise (réponses réelles : 17 500 jetons au plus, pour
+    // l'analyse des survivants). Au-delà, la CLI relance le modèle et ne rend que la fin de la réponse. Sans plafond,
+    // une réponse qui boucle (lignes vides à l'infini) court jusqu'à 128 000 jetons, environ 14 min.
+    sortieClaudeJetons: 32_000,
   },
 
   // Direct de Cursor (lignes « ┊ ») sur la sortie de wf audit / run-plan / executer, pour le détail du shell.
