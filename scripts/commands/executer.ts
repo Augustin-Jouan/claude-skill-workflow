@@ -1,4 +1,4 @@
-// wf executer [--sans-mutation]
+// wf executer
 // Enchaîne run-plan, le passage de l'étape execution à fin, puis finish, sans repasser par la session qui pilote
 // le workflow. S'arrête dès qu'une sous-commande ne rend pas OK : question (3), échec (1), erreur d'outil (2).
 // En cas de succès, ne rend qu'un résumé court de .workflow/fin.md.
@@ -15,9 +15,9 @@ import { terminer, type Resultat } from '../lib/result.ts';
 const C = 'executer';
 const WF = fileURLToPath(new URL('../wf.ts', import.meta.url));
 
-function argumentsDe(etape: EtapeExecuter, args: string[]): string[] {
+function argumentsDe(etape: EtapeExecuter): string[] {
   if (etape === 'avancer') return ['state', 'avancer', '--note', 'run-plan terminé (wf executer)'];
-  if (etape === 'finish') return ['finish', ...args];
+  if (etape === 'finish') return ['finish'];
   return ['run-plan'];
 }
 
@@ -63,7 +63,7 @@ function lancer(racine: string, args: string[]): Promise<Resultat | null> {
   });
 }
 
-export async function run(args: string[]): Promise<void> {
+export async function run(): Promise<void> {
   const racine = racineDepot();
   if (!racine) terminer({ statut: 'ERREUR_OUTIL', commande: C, message: "Ce dossier n'est pas dans un dépôt git." });
   const dossier = dossierWorkflow(racine);
@@ -73,7 +73,7 @@ export async function run(args: string[]): Promise<void> {
   if (!etapes) terminer({ statut: 'ECHEC', commande: C, message: `executer se lance à l'étape execution ou fin ; étape en cours : ${etat.etape}.` });
 
   for (const etape of etapes) {
-    const r = await lancer(racine, argumentsDe(etape, args));
+    const r = await lancer(racine, argumentsDe(etape));
     if (!r) terminer({ statut: 'ERREUR_OUTIL', commande: C, message: `« wf ${etape} » n'a pas rendu de verdict.` });
     if (r.statut !== 'OK') terminer({ statut: r.statut, commande: C, message: r.message, details: { sousCommande: r.commande, details: r.details } });
   }

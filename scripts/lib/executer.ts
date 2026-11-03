@@ -27,10 +27,10 @@ function section(texte: string, titre: string): string {
     .trim();
 }
 
-// Les contrôles et la suite suffisent à la revue finale ; review et survivants restent dans fin.md.
+// Les contrôles suffisent à la revue finale ; la review et le journal restent dans fin.md.
 export function resumerFin(finMd: string): string {
   const titre = finMd.match(/^# (.+)$/m)?.[1] ?? 'Fin de branche';
-  return [`${titre.replace(/^Fin de branche/, 'Fin de branche prête')}`, section(finMd, 'Contrôles'), section(finMd, 'Suite'), 'Détail complet (review, survivants, journal) : .workflow/fin.md']
+  return [`${titre.replace(/^Fin de branche/, 'Fin de branche prête')}`, section(finMd, 'Contrôles'), 'Détail complet (review, journal) : .workflow/fin.md']
     .filter(Boolean)
     .join('\n');
 }

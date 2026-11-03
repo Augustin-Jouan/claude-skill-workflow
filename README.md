@@ -2,7 +2,7 @@
 
 Mon workflow de développement, lancé par `/workflow` dans n'importe quel dépôt git. Le skill (`SKILL.md`) enchaîne les étapes et dialogue ; les scripts (`scripts/wf.ts`) font toutes les vérifications. Rien n'est installé ni commité dans le dépôt de travail : tout vit dans `.workflow/`, exclu de git localement.
 
-Prérequis : Node ≥ 22.18 (exécute le TypeScript directement), git, et `npm install` une fois dans ce dossier (il installe aussi Stryker, qui n'est donc jamais ajouté au projet). Pour `audit`, `run-plan` et `finish` : Cursor Agent CLI (`agent`, connecté avec `agent login`) et Claude Code (`claude`) dans le PATH. Sous Windows, `agent` est aussi cherché dans `%LOCALAPPDATA%\cursor-agent`, pour un terminal ouvert avant son installation. Vérifie les identifiants de modèles de `config/defaults.ts` avec `agent --list-models`. Plus tard : herdr.
+Prérequis : Node ≥ 22.18 (exécute le TypeScript directement), git, et `npm install` une fois dans ce dossier. Pour `audit`, `run-plan` et `finish` : Cursor Agent CLI (`agent`, connecté avec `agent login`) et Claude Code (`claude`) dans le PATH. Sous Windows, `agent` est aussi cherché dans `%LOCALAPPDATA%\cursor-agent`, pour un terminal ouvert avant son installation. Vérifie les identifiants de modèles de `config/defaults.ts` avec `agent --list-models`. Plus tard : herdr.
 
 Tests du skill : `npm test` (runner intégré de Node) et `npm run typecheck`.
 
@@ -21,8 +21,8 @@ Tests du skill : `npm test` (runner intégré de Node) et `npm run typecheck`.
 | `audit <spec\|plan\|spec-plan> [--reprendre]` | audit Cursor headless, lecture seule, format vérifié (un préambule avant le premier point est ignoré). `--reprendre` relit la réponse du dernier appel sans relancer Cursor, si la spec et le plan n'ont pas changé et qu'elle n'est pas déjà enregistrée | ✅ |
 | `run-plan` | orchestrateur des tâches (voir ci-dessous) | ✅ couche 3 |
 | `answer "<réponse>"` | enregistre la réponse à la question de `run-plan` | ✅ |
-| `finish [--sans-mutation]` | fin de branche (voir ci-dessous) | ✅ couche 4 |
-| `executer [--sans-mutation]` | enchaîne `run-plan`, le passage à `fin` et `finish` (voir ci-dessous) | ✅ |
+| `finish` | fin de branche (voir ci-dessous) | ✅ couche 4 |
+| `executer` | enchaîne `run-plan`, le passage à `fin` et `finish` (voir ci-dessous) | ✅ |
 | `suivre` | affiche en direct ce que fait Cursor, dans un autre terminal (voir ci-dessous) | ✅ |
 | `bilan` | propose des améliorations du workflow d'après ce que la branche a rencontré (voir ci-dessous) | ✅ |
 | `setup --worktree` | worktree + espace herdr pour le parallèle | pas prévu : à construire seulement si l'usage en parallèle à la main en montre le besoin |
@@ -65,16 +65,8 @@ Budgets (`config/defaults.ts`) : minutes par tâche (30), minutes et appels LLM 
 À l'étape `fin`, sur un arbre propre, lancé en arrière-plan.
 
 1. Traçabilité (`wf trace`), suite complète (échecs relancés une fois, comparés à l'état de départ, aux échecs admis aux jalons et à la quarantaine), typecheck. Un bloquant : `fin.md` partiel et code 1 ; la correction passe par une nouvelle tâche (`wf state revenir plan`).
-2. Stryker sur les fichiers de code changés depuis le départ de run-plan, hors tests, fichiers verrouillés et outillage de test. L'outillage, c'est le setup déclaré au runner (`setupFiles`, `setupFilesAfterEnv`, `globalSetup` de `package.json#jest`, projets compris, ou de `jest.config.*` / `vitest.config.*`), les fichiers qui appellent `jest.mock` ou `vi.mock`, et les modules que seuls des tests importent quand tout leur dossier est fait de tests et d'outillage (une fausse API dans `e2e/`). Instrumentées par Stryker, les fabriques de `jest.mock()` ne se chargent plus et le dry run échoue. Les chemins sont passés tels quels : `[id].tsx` ou `(tabs)/` ne sont pas lus comme des motifs. Il lance le runner du projet sur les tests liés à chaque mutant (`testRunner: command`), au plus 4 processus à la fois, et écrit tout dans `.workflow/`. Si tous les mutants finissent en Timeout, c'est une erreur d'outil : le score ne mesurerait rien. `fin.md` donne d'abord le score des seules lignes changées par la branche, puis celui des fichiers entiers, qui compte aussi le code existant.
-3. Survivants du code des tâches `feature`, sur les lignes changées depuis le départ de `run-plan` et jamais soumis lors d'une fin précédente de la branche (`.workflow/survivants-vus.json`, écrit avec `fin.md` : un survivant déjà soumis qui survit encore est un test que le développeur n'a pas retenu ; un `finish` interrompu avant `fin.md` ne compte pas). Les autres sont listés à part, sans analyse. Les `seuils.strykerFichiersAnalyses` fichiers qui en ont le plus sont analysés par Claude (`prompts/survivants.md`), avec les exigences de toutes les tâches qui ont touché le fichier. Il classe chaque survivant en équivalent ou propose un test `EX-n — …` (1 ou 2 assertions). Une réponse hors format ou qui cite un mutant inconnu est redemandée une fois. Quand l'analyse ne tourne pas (branche sans tâche feature, aucun survivant nouveau), `fin.md` et le bilan le disent au lieu d'annoncer « aucun test proposé ».
-4. Review par un contexte neuf (Claude, `prompts/review-neuve.md`) : spec, `DEVIATIONS.md` et diff de la branche, verdict `conforme`, `écarts mineurs` ou `écarts bloquants`. Elle a les outils de lecture (Read, Grep, Glob) pour lire le code que le diff appelle sans le montrer : sans outil, elle écrivait de faux appels d'outils puis bouclait jusqu'au délai. L'arbitre de `run-plan` a les mêmes outils, pour la même raison. Les autres appels Claude n'ont aucun outil ; tous ont leur sortie plafonnée (`seuils.sortieClaudeJetons`).
-5. `.workflow/fin.md` (contrôles, mutation, review, résumé du journal) et `.workflow/fin.json` (commit vérifié). `state avancer` depuis `fin` refuse si HEAD a changé depuis ou si l'arbre n'est pas propre.
-
-`--sans-mutation` saute les étapes 2 et 3, et `fin.md` le signale.
-
-Un `finish` arrêté après les étapes 2 et 3 (review en erreur, délai dépassé) garde leur résultat dans `.workflow/fin-mutation.json`. Relancé sur le même commit, avec la même option, il le reprend et ne repasse que la review : l'analyse des survivants coûte des appels LLM et ne propose pas deux fois les mêmes tests. Le fichier est effacé une fois `fin.md` écrit.
-
-Stryker garde ses résultats d'un run à l'autre (`.workflow/stryker-incremental.json`) seulement si, depuis le commit du run précédent (`.workflow/stryker-incremental.commit`), seuls des fichiers mutés ont changé. Avec `testRunner: command`, il ne voit pas les tests : un test ajouté depuis ne serait pas pris en compte. Sinon le run est complet ; `fin.md` dit lequel des deux a tourné.
+2. Review par un contexte neuf (Claude, `prompts/review-neuve.md`) : spec, `DEVIATIONS.md` et diff de la branche, verdict `conforme`, `écarts mineurs` ou `écarts bloquants`. Elle a les outils de lecture (Read, Grep, Glob) pour lire le code que le diff appelle sans le montrer : sans outil, elle écrivait de faux appels d'outils puis bouclait jusqu'au délai. L'arbitre de `run-plan` a les mêmes outils, pour la même raison. Les autres appels Claude n'ont aucun outil ; tous ont leur sortie plafonnée (`seuils.sortieClaudeJetons`).
+3. `.workflow/fin.md` (contrôles, review, résumé du journal) et `.workflow/fin.json` (commit vérifié). `state avancer` depuis `fin` refuse si HEAD a changé depuis ou si l'arbre n'est pas propre.
 
 Le résumé du journal compte les appels LLM lancés par les scripts et leurs jetons, par outil (Cursor, Claude). La session Claude qui pilote le workflow n'y est pas comptée.
 
@@ -83,7 +75,7 @@ Le résumé du journal compte les appels LLM lancés par les scripts et leurs je
 C'est ce que lance le skill à l'étape 6, en arrière-plan. Il appelle `run-plan`, puis `state avancer` vers `fin`, puis `finish`, chacun comme sous-processus, et laisse passer leur progression. Depuis l'étape `fin`, seul `finish` tourne. La session qui pilote ne fait donc qu'un appel jusqu'à la revue finale, au lieu de relire chaque sortie.
 
 - Une sous-commande qui ne rend pas 0 arrête la chaîne : executer rend son code et son message (3 : question dans `.workflow/question.md`, 1 : échec, 2 : erreur d'outil). Après `wf answer`, on relance `wf executer`.
-- Code 0 : un résumé de `fin.md` d'une dizaine de lignes (contrôles, score de mutation, verdict de la review, suite proposée) et son chemin. La review, les survivants et le journal restent dans `fin.md`.
+- Code 0 : un résumé de `fin.md` d'une dizaine de lignes (contrôles et verdict de la review) et son chemin. La review et le journal restent dans `fin.md`.
 
 ## `wf suivre`
 
@@ -91,7 +83,7 @@ Cursor tourne en arrière-plan (`--output-format stream-json`) : ses actions son
 
 ## `wf bilan`
 
-À l'étape `termine`, après la revue finale. Le script relève les faits de la branche et les numérote (`E1`, `E2`…) : lignes du journal (règles déclenchées, rejets, arbitrages, questions et réponses, appels LLM en erreur, tests instables, jalons, mutation, review), passages et retours d'étape avec leurs notes, lignes de `DEVIATIONS.md`. Claude (`modeles.bilan`, contexte neuf, `prompts/bilan.md`) propose au plus 5 améliorations du workflow. Chacune cite ses faits, une cause (règle trop stricte, faux positif, consigne de l'exécuteur, plan, spec, budget, outil) et l'endroit à changer. Les règles qui ont arrêté un vrai problème sont rangées à part, comme contrôles qui ont servi. Une réponse hors format, ou qui cite un fait inexistant, est redemandée une fois.
+À l'étape `termine`, après la revue finale. Le script relève les faits de la branche et les numérote (`E1`, `E2`…) : lignes du journal (règles déclenchées, rejets, arbitrages, questions et réponses, appels LLM en erreur, tests instables, jalons, review), passages et retours d'étape avec leurs notes, lignes de `DEVIATIONS.md`. Claude (`modeles.bilan`, contexte neuf, `prompts/bilan.md`) propose au plus 5 améliorations du workflow. Chacune cite ses faits, une cause (règle trop stricte, faux positif, consigne de l'exécuteur, plan, spec, budget, outil) et l'endroit à changer. Les règles qui ont arrêté un vrai problème sont rangées à part, comme contrôles qui ont servi. Une réponse hors format, ou qui cite un fait inexistant, est redemandée une fois.
 
 Sortie : `.workflow/bilan.md`, et une copie dans `retours.dossier` (`~/.claude/workflow-retours/<date>-<dépôt>-<branche>.md`) pour relire les bilans de plusieurs branches ensemble. Rien n'est appliqué au skill.
 
@@ -106,13 +98,13 @@ Sortie : `.workflow/bilan.md`, et une copie dans `retours.dossier` (`~/.claude/w
 
 Vérifié : chaque worktree a son propre `.workflow/`, indépendant des autres et du dépôt principal. L'exclusion est écrite une seule fois dans le `info/exclude` commun à tous les worktrees, et `git status` reste vide partout. Deux worktrees ne peuvent pas prendre le même nom (`setup` refuse, la branche existe déjà). Les worktrees temporaires de verify et du bisect se créent et se suppriment aussi depuis un worktree.
 
-Rien ne limite les runs entre eux : 5 suites de tests, 5 Stryker et 5 exécuteurs peuvent tourner en même temps (CPU, limites de débit de Cursor et de Claude, ports ou base de test du projet).
+Rien ne limite les runs entre eux : 5 suites de tests et 5 exécuteurs peuvent tourner en même temps (CPU, limites de débit de Cursor et de Claude, ports ou base de test du projet).
 
 ## Fichiers dans `.workflow/<slug>/` (un dossier par branche `wf/<slug>`)
 
-Chaque commande trouve son dossier d'après la branche courante : les workflows de plusieurs branches ne se mélangent pas (`run.json`, journal, rapports, cache Stryker), et chacun reprend quand on revient sur sa branche. Hors d'une branche `wf/…`, `wf state` répond qu'aucun workflow n'est en cours. Les messages de `wf` et le prompt de l'exécuteur donnent le chemin complet. La quarantaine est propre à chaque branche : ce dossier est protégé pendant l'exécuteur, la racine de `.workflow/` ne l'est pas.
+Chaque commande trouve son dossier d'après la branche courante : les workflows de plusieurs branches ne se mélangent pas (`run.json`, journal, rapports), et chacun reprend quand on revient sur sa branche. Hors d'une branche `wf/…`, `wf state` répond qu'aucun workflow n'est en cours. Les messages de `wf` et le prompt de l'exécuteur donnent le chemin complet. La quarantaine est propre à chaque branche : ce dossier est protégé pendant l'exécuteur, la racine de `.workflow/` ne l'est pas.
 
-`state.json`, `spec.md`, `plan.md`, `matrice.md`, `cursor.log` (actions de Cursor en direct, pour `wf suivre`), `check-plan.json` (dernier passage et empreintes), `rapports/` (verify, reporter des tests, couverture), `audits/` (`<phase>-<n>.md` et `.json`), `run.json` (état de run-plan), `run.lock`, `llm/` (prompts et sorties brutes des appels), `question.md`, `DEVIATIONS.md`, `journal.jsonl`, `quarantine.json`, `bisect/` (worktree temporaire du bisect), `fin.md`, `fin.json`, `bilan.md`, `stryker.config.json`, `stryker-incremental.json`, `stryker-tmp/`, `rapports/mutation.json` et `rapports/stryker.log`.
+`state.json`, `spec.md`, `plan.md`, `matrice.md`, `cursor.log` (actions de Cursor en direct, pour `wf suivre`), `check-plan.json` (dernier passage et empreintes), `rapports/` (verify, reporter des tests, couverture), `audits/` (`<phase>-<n>.md` et `.json`), `run.json` (état de run-plan), `run.lock`, `llm/` (prompts et sorties brutes des appels), `question.md`, `DEVIATIONS.md`, `journal.jsonl`, `quarantine.json`, `bisect/` (worktree temporaire du bisect), `fin.md`, `fin.json` et `bilan.md`.
 
 ## Écarts avec `workflow-dev.md`
 
@@ -124,7 +116,7 @@ Chaque commande trouve son dossier d'après la branche courante : les workflows 
 - Suite complète et typecheck sont comparés à leur état avant la première tâche.
 - Le bisect est fait par le script (recherche dichotomique sur les commits des tâches dans un worktree de `.workflow/`), pas par `git bisect` : le dépôt et sa branche ne bougent pas. La dernière tâche est toujours un jalon.
 - Des régressions acceptées à un jalon ne bloquent plus ensuite, ni à finish : elles figurent dans `fin.md`.
-- Stryker tourne avec le runner du projet en ligne de commande (pas de plugin vitest/jest à installer dans le projet), sans analyse de couverture : plus lent, mais sans trace dans le dépôt. Le score de `fin.md` montre combien de mutants « tués » l'ont été par Timeout.
+- Pas de mutation testing en fin de branche : Stryker a été retiré, trop long (jusqu'à une heure, le runner du projet relancé pour chaque mutant) pour ce qu'il apportait.
 - Un appel à Cursor ou à Claude est fini quand le processus se termine, pas quand ses sorties se ferment : un petit-enfant orphelin (un jest jamais arrêté) les garderait ouvertes et figerait `run-plan`. Après 2 s, ses sorties sont lâchées.
 - Les audits ne comptent pas dans le budget d'appels LLM de la branche. Les jetons ne sont journalisés que pour Claude : Cursor ne les donne pas.
 
@@ -133,5 +125,5 @@ Chaque commande trouve son dossier d'après la branche courante : les workflows 
 1. `check-plan`, `trace`, `verify` (lint sur lignes modifiées, AST des tests, fichiers verrouillés, tests prévus verts), conditions de sortie dans `state avancer` (fait).
 2. Contrôle « rouge » des `fix` (fait).
 3. `run-plan`, `answer`, `audit` (appels headless, arbitre, budget, journal) (fait).
-4. `finish` : jalons, `bisect`, Stryker, review neuve (fait).
+4. `finish` : jalons, `bisect`, review neuve (fait).
 5. `setup --worktree` et intégration herdr : pas prévu : à construire seulement si l'usage en parallèle à la main en montre le besoin.

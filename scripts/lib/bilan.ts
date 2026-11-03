@@ -4,7 +4,6 @@
 
 import { parse } from 'yaml';
 import { ETAPES, type Transition } from './etat.ts';
-import { RAISONS_SANS_ANALYSE, type SansAnalyse } from './fin.ts';
 
 export interface Evenement {
   id: string;
@@ -51,15 +50,6 @@ function decrire(l: Ligne): string | null {
       return `Audit ${l.phase} : ${l.remontes} point(s) remonté(s), ${l.acceptes} accepté(s), ${l.rejetes} rejeté(s)`;
     case 'manuel':
       return `Phase manuelle ${l.phase} : ${l.minutes} min`;
-    case 'mutation':
-      if (l.sautee) return 'Mutation sautée (--sans-mutation)';
-      if (l.reprise) return 'Mutation et analyse des survivants reprises du finish précédent (même commit)';
-      if (l.score !== undefined) {
-        const score = typeof l.scoreBranche === 'number' ? `${l.scoreBranche} % sur les lignes changées (${l.score} % sur les fichiers entiers)` : `score ${l.score} %`;
-        const suite = l.sansAnalyse ? `analyse des survivants non lancée (${RAISONS_SANS_ANALYSE[l.sansAnalyse as SansAnalyse]})` : `${l.testsProposes} test(s) proposé(s)`;
-        return `Mutation : ${score}, ${l.survivants} survivant(s), ${suite}`;
-      }
-      return `Stryker : ${minutes(l.dureeMs)} min${l.code !== 0 ? `, code ${l.code}` : ''}${l.depasse ? ', délai dépassé' : ''}`;
     case 'review':
       return `Review neuve : ${l.verdict}`;
     case 'fin':

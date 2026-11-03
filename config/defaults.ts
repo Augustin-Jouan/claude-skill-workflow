@@ -18,7 +18,6 @@ export const CONFIG = {
     executeur: { outil: 'cursor-agent', simple: 'composer-2.5', complexe: 'cursor-grok-4.6-high' },
     arbitre: { outil: 'claude', modele: 'opus' },
     review: { outil: 'claude', modele: 'opus' },
-    survivants: { outil: 'claude', modele: 'sonnet' },
     bilan: { outil: 'claude', modele: 'opus' },
   },
 
@@ -26,18 +25,15 @@ export const CONFIG = {
     couvertureRefactor: 0.8,
     suiteRapideSecondes: 120,
     rejetsAvantArbitre: 2,
-    strykerFichiersAnalyses: 5,
-    strykerPetitModuleLignes: 150,
     controleRougeFeature: false,
     // Au-delà, l'audit d'une spec (parcours complet) passe au modèle complexe.
     auditExigencesSimple: 4,
     auditMinutes: 30,
     arbitreMinutes: 10,
     reviewMinutes: 15,
-    mutationMinutes: 60,
     bilanMinutes: 10,
-    // Plafond de sortie d'une requête Claude, réflexion comprise (réponses réelles : 17 500 jetons au plus, pour
-    // l'analyse des survivants). Au-delà, la CLI relance le modèle et ne rend que la fin de la réponse. Sans plafond,
+    // Plafond de sortie d'une requête Claude, réflexion comprise (réponses réelles : 17 500 jetons au plus). Au-delà,
+    // la CLI relance le modèle et ne rend que la fin de la réponse. Sans plafond,
     // une réponse qui boucle (lignes vides à l'infini) court jusqu'à 128 000 jetons, environ 14 min.
     sortieClaudeJetons: 32_000,
   },
@@ -86,7 +82,5 @@ export const CONFIG = {
     '**/test/**',
     '**/tests/**',
     '**/__tests__/**',
-    // Le setup déclaré au runner et les autres fichiers d'outillage de test sont reconnus par
-    // scripts/lib/outillage-test.ts, pour la mutation seulement.
   ],
 } as const;

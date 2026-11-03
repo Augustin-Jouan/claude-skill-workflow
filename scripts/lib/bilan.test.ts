@@ -37,29 +37,17 @@ test('evenementsBilan numérote les faits du journal, des étapes et de DEVIATIO
   );
 });
 
-test("une mutation reprise d'un finish interrompu est un fait du bilan, pas un Stryker sans durée", () => {
-  const ev = evenementsBilan({ journal: [{ type: 'mutation', reprise: true }], historique: [], deviations: '' });
-  assert.deepEqual(ev.map((e) => e.texte), ['Mutation et analyse des survivants reprises du finish précédent (même commit)']);
-});
-
-test("le bilan sait qu'une analyse des survivants non lancée n'a rien pu proposer, et voit la couverture des refactor", () => {
+test('le bilan voit la couverture mesurée avant les refactor', () => {
   const ev = evenementsBilan({
     journal: [
       { type: 'couverture', tache: 'T1', seuil: 80, fichiers: [{ fichier: 'src/duree.ts', pct: 100 }] },
-      { type: 'mutation', score: 87, survivants: 37, analyses: 0, testsProposes: 0, sansAnalyse: 'aucune-feature' },
     ],
     historique: [],
     deviations: '',
   });
   assert.deepEqual(ev.map((e) => e.texte), [
     'T1 · couverture avant refactor : src/duree.ts 100 % (seuil 80 %)',
-    "Mutation : score 87 %, 37 survivant(s), analyse des survivants non lancée (la branche n'a aucune tâche feature)",
   ]);
-});
-
-test('le bilan donne le score des lignes changées avant celui des fichiers entiers', () => {
-  const ev = evenementsBilan({ journal: [{ type: 'mutation', score: 66, scoreBranche: 90, survivants: 51, analyses: 2, testsProposes: 3 }], historique: [], deviations: '' });
-  assert.deepEqual(ev.map((e) => e.texte), ['Mutation : 90 % sur les lignes changées (66 % sur les fichiers entiers), 51 survivant(s), 3 test(s) proposé(s)']);
 });
 
 const REPONSE = [

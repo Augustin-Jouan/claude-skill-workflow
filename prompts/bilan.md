@@ -5,7 +5,7 @@ Une branche vient de terminer le workflow de développement (parcours {{parcours
 Le workflow :
 - spec avec des exigences `EX-n`, audits Cursor de la spec et du plan, plan en YAML validé par `check-plan`, matrice relue par le développeur ;
 - `run-plan` : un exécuteur Cursor par tâche, `verify` (règles bloquantes et signalées), suite complète et typecheck, arbitre Claude après des rejets ou sur les signalements, questions au développeur, budgets ;
-- `finish` : traçabilité, suite complète, Stryker, analyse des survivants, review neuve.
+- `finish` : traçabilité, suite complète, typecheck, review neuve.
 
 Ce qu'on peut changer : `prompts/executeur.md`, `prompts/arbitre.md`, les autres prompts, `config/defaults.ts` (seuils, budgets, fichiers verrouillés, modèles), une règle de `verify`, `references/plan-yaml.md` (format et règles du plan), `references/parcours.md`, les étapes de `SKILL.md`.
 

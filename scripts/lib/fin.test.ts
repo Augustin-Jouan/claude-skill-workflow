@@ -1,33 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { test } from 'node:test';
-import { conditionsFin, ecrireMutationFaite, ligneCouverture, lireMutationFaite, lireVerdictReview, mutationReutilisable, oublierMutationFaite, resumerJournal, suiteDeLaMutation, type MutationFaite } from './fin.ts';
-
-const faite: MutationFaite = { head: 'abc', sans: false, statut: 'faite', ligne: '- Mutation : score 87 %', section: '## Mutation testing', testsProposes: 5, vus: ['src/a.ts:1'] };
-
-test("un finish interrompu après la mutation (review en erreur) la réutilise sur le même commit, sans relancer l'analyse", () => {
-  assert.equal(mutationReutilisable(faite, 'abc', false), true);
-  assert.equal(mutationReutilisable(faite, 'def', false), false, 'le commit a changé');
-  assert.equal(mutationReutilisable(faite, 'abc', true), false, '--sans-mutation demandé cette fois');
-  assert.equal(mutationReutilisable({ ...faite, sans: true, statut: 'sautee' }, 'abc', false), false, 'mutation sautée la dernière fois');
-  assert.equal(mutationReutilisable(null, 'abc', false), false);
-});
-
-test('la mutation faite est gardée dans .workflow/ jusqu’à ce que fin.md soit écrit', () => {
-  const dossier = mkdtempSync(join(tmpdir(), 'wf-fin-'));
-  try {
-    assert.equal(lireMutationFaite(dossier), null);
-    ecrireMutationFaite(dossier, faite);
-    assert.deepEqual(lireMutationFaite(dossier), faite);
-    oublierMutationFaite(dossier);
-    assert.equal(lireMutationFaite(dossier), null);
-    oublierMutationFaite(dossier);
-  } finally {
-    rmSync(dossier, { recursive: true, force: true });
-  }
-});
+import { conditionsFin, ligneCouverture, lireVerdictReview, resumerJournal } from './fin.ts';
 
 test('lireVerdictReview lit la ligne qui suit « ## Verdict »', () => {
   assert.equal(lireVerdictReview('## Verdict\nécarts mineurs\n\n## Écarts\n…'), 'écarts mineurs');
@@ -69,7 +42,7 @@ test('resumerJournal dit quand il n’y a rien', () => {
 });
 
 test('conditionsFin : finish passé sur le HEAD actuel, arbre propre', () => {
-  const fin = { date: 'd', head: 'abc', ok: true, mutation: 'faite' as const, verdict: 'conforme' };
+  const fin = { date: 'd', head: 'abc', ok: true, verdict: 'conforme' };
   assert.deepEqual(conditionsFin(fin, 'abc', true), []);
   assert.match(conditionsFin(null, 'abc', true).join(' '), /jamais été lancé/);
   assert.match(conditionsFin({ ...fin, ok: false }, 'abc', true).join(' '), /a échoué/);
@@ -88,16 +61,6 @@ test('resumerJournal liste le modèle Cursor choisi à chaque appel, avec sa rai
   assert.match(md, /audit spec · lourd \(spec de 8 exigence\(s\)\) · 6 min/);
   assert.match(md, /T1 tentative 2 · lourd \(escalade après 1 rejet\(s\)\) · 4 min/);
   assert.doesNotMatch(md, /review ·/);
-});
-
-test("la suite de fin.md dit pourquoi l'analyse des survivants n'a pas tourné, au lieu d'annoncer « aucun test proposé »", () => {
-  const m = (autres: Partial<MutationFaite>) => suiteDeLaMutation({ ...faite, testsProposes: 0, ...autres });
-  assert.match(m({ testsProposes: 3 }), /propose 3 test\(s\)/);
-  assert.match(m({ sansAnalyse: 'aucune-feature' }), /non lancée : la branche n'a aucune tâche feature/);
-  assert.match(m({ sansAnalyse: 'aucun-survivant' }), /non lancée : aucun survivant/);
-  assert.match(m({ statut: 'sautee' }), /non lancée : mutation sautée/);
-  assert.match(m({ statut: 'aucun-fichier' }), /non lancée : aucun fichier de code/);
-  assert.equal(m({}), "Aucun test proposé par l'analyse des survivants.");
 });
 
 test('la couverture mesurée avant chaque refactor devient une ligne des contrôles de fin.md', () => {

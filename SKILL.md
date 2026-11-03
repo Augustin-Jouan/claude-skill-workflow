@@ -50,7 +50,7 @@ Rédige le plan selon `references/plan-yaml.md`, avec la `difficulte` de chaque 
 Montre `.workflow/matrice.md` en entier. 🛑 Relecture, difficultés comprises. Si une assertion ou une difficulté change : modifie le plan, `wf check-plan`, remontre la matrice.
 
 ### 6. Exécution et fin de branche
-Lance `wf executer` en arrière-plan (`run_in_background`) et attends sa notification, sans le relancer ni lire son état entre-temps. Il enchaîne `run-plan`, le passage à l'étape `fin` et `finish`, et ne rend la main qu'à une décision du développeur. `--sans-mutation` seulement si l'utilisateur le demande lui-même.
+Lance `wf executer` en arrière-plan (`run_in_background`) et attends sa notification, sans le relancer ni lire son état entre-temps. Il enchaîne `run-plan`, le passage à l'étape `fin` et `finish`, et ne rend la main qu'à une décision du développeur.
 - Code 3 : montre `.workflow/question.md`, 🛑, enregistre la réponse avec `wf answer "<réponse>"` (ses mots, pas les tiens), relance `wf executer`.
   Question de jalon (la suite complète a régressé) : présente-la, l'utilisateur choisit entre continuer (`wf answer`) et une tâche corrective, qui est une replanification. Si la question est une replanification : toi seul amendes le YAML, tu notes la raison dans `.workflow/DEVIATIONS.md`, `wf check-plan`. Si des tests ou des assertions changent, `wf state revenir matrice --note "..."` et retour à l'étape 5.
 - Code 1 : montre le message. S'il vient de `finish`, la correction est une nouvelle tâche (`wf state revenir plan`, puis les étapes 3 à 6).
@@ -58,8 +58,8 @@ Lance `wf executer` en arrière-plan (`run_in_background`) et attends sa notific
 - Code 0 : passe à l'étape 7.
 
 ### 7. Revue finale
-Présente le résumé que `wf executer` a rendu, tel quel, avec le chemin `.workflow/fin.md`. N'ouvre `fin.md` que pour la partie que l'utilisateur demande (review, survivants, journal). 🛑 Revue finale.
-Si l'utilisateur retient des tests proposés ou des écarts de la review : `wf state revenir plan --note "..."`, ajoute une tâche (feature avec `comportement_existant: true` pour les tests), puis les étapes 3 à 6. Quand il valide : `wf state avancer --note "..."`. Tu ne pousses rien et tu n'ouvres pas de PR sans demande explicite.
+Présente le résumé que `wf executer` a rendu, tel quel, avec le chemin `.workflow/fin.md`. N'ouvre `fin.md` que pour la partie que l'utilisateur demande (review, journal). 🛑 Revue finale.
+Si l'utilisateur retient des écarts de la review : `wf state revenir plan --note "..."`, ajoute une tâche (feature avec `comportement_existant: true` pour des tests sur du code déjà écrit), puis les étapes 3 à 6. Quand il valide : `wf state avancer --note "..."`. Tu ne pousses rien et tu n'ouvres pas de PR sans demande explicite.
 
 ### 8. Bilan du workflow
 Une fois l'étape `termine` atteinte, lance `wf bilan` et montre `.workflow/bilan.md` en entier, avec le chemin de sa copie dans le dossier des retours. Ce sont des propositions pour améliorer le workflow : tu n'en appliques aucune, ni au skill ni au projet, sans demande explicite. Code 2 : montre le message ; la branche reste terminée.
