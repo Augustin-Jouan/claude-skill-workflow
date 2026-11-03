@@ -19,6 +19,8 @@ export interface FichierMutation {
   tues: number;
   timeouts: number;
   score: number;
+  // Lignes des mutants tués, pour le score des seules lignes changées par la branche.
+  lignesTues: number[];
   survivants: Mutant[];
 }
 
@@ -44,11 +46,37 @@ export function lireMutants(rapport: { files: Record<string, { mutants: MutantSt
       tues,
       timeouts: valides.filter((m) => m.status === 'Timeout').length,
       score: valides.length === 0 ? 100 : Math.round((tues / valides.length) * 100),
+      lignesTues: valides.filter((m) => TUES.includes(m.status)).map((m) => m.location.start.line),
       survivants: valides
         .filter((m) => SURVIVANTS.includes(m.status))
         .map((m) => ({ id: m.id, mutateur: m.mutatorName, remplacement: m.replacement ?? '', ligne: m.location.start.line, statut: m.status })),
     };
   });
+}
+
+// Le score des fichiers entiers compte aussi le code existant, que la branche n'a pas écrit : sur l'essai AVI,
+// 66 % pour les fichiers, 90 % pour les lignes changées.
+export function scoreDesLignes(fichiers: FichierMutation[], lignes: ReadonlyMap<string, ReadonlySet<number>>): { tues: number; total: number } {
+  let tues = 0;
+  let total = 0;
+  for (const f of fichiers) {
+    const changees = lignes.get(f.fichier);
+    if (!changees) continue;
+    const t = f.lignesTues.filter((l) => changees.has(l)).length;
+    tues += t;
+    total += t + f.survivants.filter((m) => changees.has(m.ligne)).length;
+  }
+  return { tues, total };
+}
+
+const pourcent = (tues: number, total: number) => (total === 0 ? 100 : Math.round((tues / total) * 100));
+
+export function ligneScoreMutation(o: { branche: { tues: number; total: number }; tues: number; total: number; fichiers: number; incremental: boolean }): string {
+  const branche =
+    o.branche.total === 0
+      ? 'aucun mutant sur les lignes changées par la branche'
+      : `${pourcent(o.branche.tues, o.branche.total)} % sur les lignes changées par la branche (${o.branche.tues}/${o.branche.total} mutants tués)`;
+  return `- Mutation : ${branche} · ${pourcent(o.tues, o.total)} % sur les fichiers entiers (${o.tues}/${o.total}, ${o.fichiers} fichier(s), Stryker ${o.incremental ? 'incrémental' : 'complet'})`;
 }
 
 // Seuls les survivants du code des tâches feature sont analysés, sur les fichiers qui en ont le plus.

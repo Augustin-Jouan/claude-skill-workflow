@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { choisirAnalyses, cleMutant, configStryker, exigencesDesFichiersFeature, formaterMutants, incrementalReutilisable, lireAnalyseSurvivants, lireMutants, trierSurvivants } from './mutation.ts';
+import { choisirAnalyses, cleMutant, configStryker, exigencesDesFichiersFeature, formaterMutants, incrementalReutilisable, ligneScoreMutation, lireAnalyseSurvivants, lireMutants, scoreDesLignes, trierSurvivants } from './mutation.ts';
 
 const RAPPORT = {
   files: {
@@ -27,12 +27,32 @@ test('lireMutants compte tués et survivants par fichier, sans les mutants inval
   assert.deepEqual(signe.survivants.map((m) => m.id), ['1', '3']);
   assert.equal(signe.score, 50);
   assert.equal(signe.timeouts, 1);
+  assert.deepEqual(signe.lignesTues, [1, 3]);
   assert.deepEqual(signe.survivants[1], { id: '3', mutateur: 'StringLiteral', remplacement: '""', ligne: 4, statut: 'NoCoverage' });
   assert.equal(fichiers.find((f) => f.fichier === 'src/autre.ts')?.score, 100);
 });
 
+test("le score de la branche ne compte que les mutants des lignes qu'elle a changées", () => {
+  // signe.ts : tués aux lignes 1 et 3, survivants aux lignes 2 et 4 ; autre.ts n'est pas touché par la branche.
+  const fichiers = lireMutants(RAPPORT);
+  assert.deepEqual(scoreDesLignes(fichiers, new Map([['src/signe.ts', new Set([2, 3])]])), { tues: 1, total: 2 });
+  assert.deepEqual(scoreDesLignes(fichiers, new Map()), { tues: 0, total: 0 });
+});
+
+test('fin.md donne le score des lignes changées avant celui des fichiers entiers', () => {
+  // Essai AVI : 66 % sur les fichiers entiers, mais 90 % sur le code de la branche.
+  assert.equal(
+    ligneScoreMutation({ branche: { tues: 43, total: 48 }, tues: 101, total: 152, fichiers: 4, incremental: false }),
+    '- Mutation : 90 % sur les lignes changées par la branche (43/48 mutants tués) · 66 % sur les fichiers entiers (101/152, 4 fichier(s), Stryker complet)',
+  );
+  assert.equal(
+    ligneScoreMutation({ branche: { tues: 0, total: 0 }, tues: 9, total: 10, fichiers: 1, incremental: true }),
+    '- Mutation : aucun mutant sur les lignes changées par la branche · 90 % sur les fichiers entiers (9/10, 1 fichier(s), Stryker incrémental)',
+  );
+});
+
 test('choisirAnalyses garde les fichiers feature qui ont le plus de survivants, dans la limite', () => {
-  const m = (fichier: string, n: number) => ({ fichier, total: 10, tues: 10 - n, timeouts: 0, score: 0, survivants: Array.from({ length: n }, (_, i) => ({ id: `${fichier}${i}`, mutateur: 'X', remplacement: 'y', ligne: 1, statut: 'Survived' })) });
+  const m = (fichier: string, n: number) => ({ fichier, total: 10, tues: 10 - n, timeouts: 0, score: 0, lignesTues: [], survivants: Array.from({ length: n }, (_, i) => ({ id: `${fichier}${i}`, mutateur: 'X', remplacement: 'y', ligne: 1, statut: 'Survived' })) });
   const fichiers = [m('a.ts', 1), m('b.ts', 5), m('c.ts', 3), m('d.ts', 0), m('hors.ts', 9)];
   const { analyses, autres } = choisirAnalyses(fichiers, ['a.ts', 'b.ts', 'c.ts', 'd.ts'], 2);
   assert.deepEqual(analyses.map((f) => f.fichier), ['b.ts', 'c.ts']);
@@ -41,7 +61,7 @@ test('choisirAnalyses garde les fichiers feature qui ont le plus de survivants, 
 
 test("trierSurvivants n'analyse que les lignes changées par la branche, et jamais deux fois le même mutant", () => {
   const mutant = (id: string, ligne: number) => ({ id, mutateur: 'Regex', remplacement: '/x/', ligne, statut: 'Survived' });
-  const f = { fichier: 'src/texte.ts', total: 4, tues: 0, timeouts: 0, score: 0, survivants: [mutant('1', 5), mutant('2', 15), mutant('3', 22), mutant('4', 19)] };
+  const f = { fichier: 'src/texte.ts', total: 4, tues: 0, timeouts: 0, score: 0, lignesTues: [], survivants: [mutant('1', 5), mutant('2', 15), mutant('3', 22), mutant('4', 19)] };
   // Les ids de Stryker changent d'un run à l'autre : un mutant déjà vu se reconnaît à sa place et à son effet.
   const vus = new Set([cleMutant('src/texte.ts', mutant('autre-id', 22))]);
   const tries = trierSurvivants(f, new Set([5, 6, 22]), vus);

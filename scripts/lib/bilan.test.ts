@@ -57,6 +57,11 @@ test("le bilan sait qu'une analyse des survivants non lancée n'a rien pu propos
   ]);
 });
 
+test('le bilan donne le score des lignes changées avant celui des fichiers entiers', () => {
+  const ev = evenementsBilan({ journal: [{ type: 'mutation', score: 66, scoreBranche: 90, survivants: 51, analyses: 2, testsProposes: 3 }], historique: [], deviations: '' });
+  assert.deepEqual(ev.map((e) => e.texte), ['Mutation : 90 % sur les lignes changées (66 % sur les fichiers entiers), 51 survivant(s), 3 test(s) proposé(s)']);
+});
+
 const REPONSE = [
   '```yaml',
   'suggestions:',

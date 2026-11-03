@@ -54,10 +54,11 @@ function decrire(l: Ligne): string | null {
     case 'mutation':
       if (l.sautee) return 'Mutation sautée (--sans-mutation)';
       if (l.reprise) return 'Mutation et analyse des survivants reprises du finish précédent (même commit)';
-      if (l.score !== undefined && l.sansAnalyse) {
-        return `Mutation : score ${l.score} %, ${l.survivants} survivant(s), analyse des survivants non lancée (${RAISONS_SANS_ANALYSE[l.sansAnalyse as SansAnalyse]})`;
+      if (l.score !== undefined) {
+        const score = typeof l.scoreBranche === 'number' ? `${l.scoreBranche} % sur les lignes changées (${l.score} % sur les fichiers entiers)` : `score ${l.score} %`;
+        const suite = l.sansAnalyse ? `analyse des survivants non lancée (${RAISONS_SANS_ANALYSE[l.sansAnalyse as SansAnalyse]})` : `${l.testsProposes} test(s) proposé(s)`;
+        return `Mutation : ${score}, ${l.survivants} survivant(s), ${suite}`;
       }
-      if (l.score !== undefined) return `Mutation : score ${l.score} %, ${l.survivants} survivant(s), ${l.testsProposes} test(s) proposé(s)`;
       return `Stryker : ${minutes(l.dureeMs)} min${l.code !== 0 ? `, code ${l.code}` : ''}${l.depasse ? ', délai dépassé' : ''}`;
     case 'review':
       return `Review neuve : ${l.verdict}`;

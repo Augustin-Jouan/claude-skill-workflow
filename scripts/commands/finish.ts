@@ -21,7 +21,7 @@ import { remplir } from '../lib/gabarit.ts';
 import { correspond } from '../lib/glob.ts';
 import { ajouterAuJournal } from '../lib/journal.ts';
 import { appelerLlm, commandeDeLancement, executer, type Reponse } from '../lib/llm.ts';
-import { choisirAnalyses, cleMutant, configStryker, exigencesDesFichiersFeature, formaterMutants, incrementalReutilisable, lireAnalyseSurvivants, lireMutants, trierSurvivants, type AnalyseSurvivants, type FichierMutation } from '../lib/mutation.ts';
+import { choisirAnalyses, cleMutant, configStryker, exigencesDesFichiersFeature, formaterMutants, incrementalReutilisable, ligneScoreMutation, lireAnalyseSurvivants, lireMutants, scoreDesLignes, trierSurvivants, type AnalyseSurvivants, type FichierMutation } from '../lib/mutation.ts';
 import { lirePlan } from '../lib/plan.ts';
 import { terminer } from '../lib/result.ts';
 import { echecsAdmis, lireRun } from '../lib/run-etat.ts';
@@ -260,9 +260,19 @@ async function mutation(ctx: Contexte, sans: boolean): Promise<{ statut: Fin['mu
   const total = resultats.reduce((s, f) => s + f.total, 0);
   const tues = resultats.reduce((s, f) => s + f.tues, 0);
   const score = total === 0 ? 100 : Math.round((tues / total) * 100);
+  const branche = scoreDesLignes(resultats, lignes);
+  const scoreBranche = branche.total === 0 ? null : Math.round((branche.tues / branche.total) * 100);
+  const colonneBranche = (f: FichierMutation) => {
+    const b = scoreDesLignes([f], lignes);
+    return b.total === 0 ? '—' : `${Math.round((b.tues / b.total) * 100)} % (${b.tues}/${b.total})`;
+  };
   const parties = [
     '## Mutation testing',
-    ['| Fichier | Mutants | Tués (dont Timeout) | Survivants | Score |', '|---|---|---|---|---|', ...resultats.map((f) => `| ${f.fichier} | ${f.total} | ${f.tues} (${f.timeouts}) | ${f.survivants.length} | ${f.score} % |`)].join('\n'),
+    [
+      '| Fichier | Mutants | Tués (dont Timeout) | Survivants | Score | Lignes changées |',
+      '|---|---|---|---|---|---|',
+      ...resultats.map((f) => `| ${f.fichier} | ${f.total} | ${f.tues} (${f.timeouts}) | ${f.survivants.length} | ${f.score} % | ${colonneBranche(f)} |`),
+    ].join('\n'),
   ];
 
   let testsProposes = 0;
@@ -291,8 +301,9 @@ async function mutation(ctx: Contexte, sans: boolean): Promise<{ statut: Fin['mu
   ecartes("### Survivants déjà soumis lors d'une fin précédente, test non retenu (non analysés)", 'dejaProposes');
   for (const f of analyses) for (const m of f.survivants) vus.add(cleMutant(f.fichier, m));
   const sansAnalyse: SansAnalyse | undefined = analyses.length > 0 ? undefined : features.size === 0 ? 'aucune-feature' : 'aucun-survivant';
-  journal(ctx, { type: 'mutation', score, fichiers: resultats.length, survivants: total - tues, analyses: analyses.length, testsProposes, sansAnalyse });
-  return { statut: 'faite', ligne: `- Mutation : score ${score} % (${tues}/${total} mutants tués, ${resultats.length} fichier(s), Stryker ${incremental ? 'incrémental' : 'complet'})`, section: parties.join('\n\n'), testsProposes, vus: [...vus], sansAnalyse };
+  journal(ctx, { type: 'mutation', score, scoreBranche, fichiers: resultats.length, survivants: total - tues, analyses: analyses.length, testsProposes, sansAnalyse });
+  const ligne = ligneScoreMutation({ branche, tues, total, fichiers: resultats.length, incremental });
+  return { statut: 'faite', ligne, section: parties.join('\n\n'), testsProposes, vus: [...vus], sansAnalyse };
 }
 
 // --- 4 : review neuve ---
