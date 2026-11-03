@@ -136,12 +136,20 @@ export interface ConfigStryker {
 
 // binaire : chemin du runner relatif à la racine du projet (node_modules est relié dans le bac à sable de Stryker).
 // dossier : celui du workflow de la branche, relatif à la racine (.workflow/<slug>).
+// Stryker lit « mutate » comme des motifs minimatch : [id] y serait une classe de caractères et la page
+// d'expo-router ne serait jamais mutée. Chaque métacaractère devient une classe d'un seul caractère ; la barre
+// oblique inverse ne convient pas, Stryker la change en / sous Windows.
+const motifLitteral = (f: string) => f.replace(/[[\]*?{}()!+@]/g, (c) => `[${c}]`);
+// La commande passe par un shell, où des parenthèses seraient une erreur de syntaxe.
+const argumentShell = (f: string) => (/^[\w./-]+$/.test(f) ? f : `"${f}"`);
+
 export function configStryker(o: { runner: Runner; binaire: string; fichiers: string[]; dossier: string; concurrence: number }): ConfigStryker {
-  const tests = o.runner === 'vitest' ? `related --run ${o.fichiers.join(' ')}` : `--ci --findRelatedTests ${o.fichiers.join(' ')}`;
+  const chemins = o.fichiers.map(argumentShell).join(' ');
+  const tests = o.runner === 'vitest' ? `related --run ${chemins}` : `--ci --findRelatedTests ${chemins}`;
   return {
     testRunner: 'command',
     commandRunner: { command: `node ${o.binaire} ${tests}` },
-    mutate: o.fichiers,
+    mutate: o.fichiers.map(motifLitteral),
     coverageAnalysis: 'off',
     reporters: ['json'],
     jsonReporter: { fileName: `${o.dossier}/rapports/mutation.json` },

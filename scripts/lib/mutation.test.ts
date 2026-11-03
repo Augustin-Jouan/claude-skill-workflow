@@ -92,6 +92,14 @@ test('configStryker lance le runner du projet sur les tests liés, tout écrit d
   assert.deepEqual(jest.commandRunner, { command: 'node node_modules/jest/bin/jest.js --ci --findRelatedTests src/a.ts' });
 });
 
+test("configStryker fait muter les pages d'expo-router : crochets et parenthèses des chemins ne sont pas des motifs", () => {
+  // Cas réel (AVI) : « Glob pattern "app/establishments/edit/[id].tsx" did not result in any files », la page n'était pas mutée.
+  const c = configStryker({ runner: 'jest', binaire: 'node_modules/jest/bin/jest.js', fichiers: ['app/edit/[id].tsx', 'app/(tabs)/[...slug].tsx', 'src/a.ts'], dossier: '.workflow/x', concurrence: 1 });
+  assert.deepEqual(c.mutate, ['app/edit/[[]id[]].tsx', 'app/[(]tabs[)]/[[]...slug[]].tsx', 'src/a.ts']);
+  // La commande passe par un shell : un chemin à parenthèses y serait une erreur de syntaxe.
+  assert.equal(c.commandRunner.command, 'node node_modules/jest/bin/jest.js --ci --findRelatedTests "app/edit/[id].tsx" "app/(tabs)/[...slug].tsx" src/a.ts');
+});
+
 test("lireAnalyseSurvivants refuse un mutant qui n'est pas un survivant du fichier", () => {
   const texte = '```yaml\nequivalents:\n  - mutant: "7"\n    raison: "même résultat"\ntests:\n  - nom: "EX-1 — zéro"\n    assertions: ["signe(0) vaut zero"]\n    comportement_existant: true\n    mutants: ["1", "8"]\n```';
   const a = lireAnalyseSurvivants(texte, ['1', '3']);

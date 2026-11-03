@@ -86,6 +86,7 @@ export const CONFIG = {
     '**/test/**',
     '**/tests/**',
     '**/__tests__/**',
-    // À venir : les fichiers référencés par setupFiles / globalSetup, lus dans la config du runner.
+    // Le setup déclaré au runner et les autres fichiers d'outillage de test sont reconnus par
+    // scripts/lib/outillage-test.ts, pour la mutation seulement.
   ],
 } as const;

@@ -74,6 +74,8 @@ function arreterArbre(pid: number): void {
   }
 }
 
+const DELAI_FERMETURE_MS = 2_000;
+
 export function executer(
   l: Lancement,
   o: { cwd: string; entree?: string; timeoutMs: number; env?: NodeJS.ProcessEnv; surLigne?: (ligne: string) => void },
@@ -108,10 +110,25 @@ export function executer(
       clearTimeout(minuteur);
       reject(e);
     });
-    enfant.on('close', (code) => {
+    let fini = false;
+    const finir = (code: number | null) => {
+      if (fini) return;
+      fini = true;
       clearTimeout(minuteur);
       if (o.surLigne && reste) o.surLigne(reste);
       resolve({ code, stdout, stderr, depasse, dureeMs: Date.now() - debut });
+    };
+    enfant.on('close', finir);
+    // 'close' attend que tous les détenteurs des tuyaux les ferment : un petit-enfant orphelin (un jest lancé par
+    // Cursor et jamais arrêté) les garde ouverts et figerait le run. Le processus sorti, on lui laisse le temps de
+    // vider sa sortie, puis on lâche les tuyaux.
+    enfant.on('exit', (code) => {
+      setTimeout(() => {
+        if (fini) return;
+        enfant.stdout.destroy();
+        enfant.stderr.destroy();
+        finir(code);
+      }, DELAI_FERMETURE_MS).unref();
     });
     enfant.stdin.on('error', () => {});
     enfant.stdin.end(o.entree ?? '');

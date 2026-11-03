@@ -111,3 +111,26 @@ test('executer arrête le processus et ses enfants au-delà du délai', async ()
   assert.equal(r.depasse, true);
   assert.ok(Date.now() - debut < 10_000);
 });
+
+test("executer rend la main quand le processus se termine, même si un petit-enfant garde les tuyaux ouverts", async () => {
+  // Cas réel : un jest orphelin gardait stdout ouvert, 'close' n'arrivait jamais et run-plan restait figé.
+  const script = join(dossier, 'orphelin.mjs');
+  writeFileSync(
+    script,
+    "import { spawn } from 'node:child_process';\n" +
+      "const p = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 20_000)'], { stdio: 'inherit', detached: true, cwd: '..' });\n" +
+      'p.unref();\n' +
+      "console.log('pid ' + p.pid);\n",
+  );
+  const debut = Date.now();
+  const r = await executer({ commande: process.execPath, args: [script], shell: false }, { cwd: dossier, timeoutMs: 30_000 });
+  const pid = Number(/pid (\d+)/.exec(r.stdout)?.[1]);
+  try {
+    process.kill(pid);
+  } catch {
+    // Déjà terminé.
+  }
+  assert.equal(r.code, 0);
+  assert.match(r.stdout, /pid \d+/);
+  assert.ok(Date.now() - debut < 8_000, `rendu en ${Date.now() - debut} ms`);
+});

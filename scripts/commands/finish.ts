@@ -22,6 +22,7 @@ import { correspond } from '../lib/glob.ts';
 import { ajouterAuJournal } from '../lib/journal.ts';
 import { appelerLlm, commandeDeLancement, executer, type Reponse } from '../lib/llm.ts';
 import { choisirAnalyses, cleMutant, configStryker, exigencesDesFichiersFeature, formaterMutants, incrementalReutilisable, ligneScoreMutation, lireAnalyseSurvivants, lireMutants, scoreDesLignes, trierSurvivants, type AnalyseSurvivants, type FichierMutation } from '../lib/mutation.ts';
+import { outillageDeTest, setupsDeclares } from '../lib/outillage-test.ts';
 import { lirePlan } from '../lib/plan.ts';
 import { terminer } from '../lib/result.ts';
 import { echecsAdmis, lireRun } from '../lib/run-etat.ts';
@@ -130,11 +131,23 @@ function controles(ctx: Contexte): { lignes: string[]; bloquants: string[] } {
 
 // --- 3 : mutation testing ---
 
+const CONFIGS_RUNNER = /^(package\.json|(jest|vitest|vite)\.config\.[cm]?[jt]s(on)?|vitest\.workspace\.[cm]?[jt]s(on)?)$/;
+
 function fichiersDeLaBranche(ctx: Contexte): string[] {
-  return git(['-c', 'core.quotePath=false', 'diff', '--name-only', ctx.base, ctx.head], ctx.racine)
+  const candidats = git(['-c', 'core.quotePath=false', 'diff', '--name-only', ctx.base, ctx.head], ctx.racine)
     .split(/\r?\n/)
     .filter((f) => f && CODE_SOURCE.test(f) && !estFichierDeTest(f, CONFIG.fichiersTest) && existsSync(join(ctx.racine, f)))
     .filter((f) => !CONFIG.verrouilles.some((v) => correspond(f, v.split('#')[0])));
+  const tous = fichiersDuDepot(ctx.racine).filter((f) => existsSync(join(ctx.racine, f)));
+  const lire = (f: string) => readFileSync(join(ctx.racine, f), 'utf8');
+  const outillage = outillageDeTest({
+    candidats,
+    depot: new Map(tous.filter((f) => CODE_SOURCE.test(f)).map((f) => [f, lire(f)])),
+    setups: setupsDeclares(tous.filter((f) => CONFIGS_RUNNER.test(f)).map(lire)),
+    estTest: (f) => estFichierDeTest(f, CONFIG.fichiersTest),
+  });
+  if (outillage.size > 0) afficher(`Mutation : outillage de test écarté (${[...outillage].join(', ')})`);
+  return candidats.filter((f) => !outillage.has(f));
 }
 
 async function lancerStryker(ctx: Contexte, fichiers: string[]): Promise<{ resultats: FichierMutation[]; incremental: boolean }> {
