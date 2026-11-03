@@ -21,7 +21,7 @@ import { remplir } from '../lib/gabarit.ts';
 import { correspond } from '../lib/glob.ts';
 import { ajouterAuJournal } from '../lib/journal.ts';
 import { appelerLlm, commandeDeLancement, executer, type Reponse } from '../lib/llm.ts';
-import { choisirAnalyses, cleMutant, configStryker, formaterMutants, incrementalReutilisable, lireAnalyseSurvivants, lireMutants, trierSurvivants, type AnalyseSurvivants, type FichierMutation } from '../lib/mutation.ts';
+import { choisirAnalyses, cleMutant, configStryker, exigencesDesFichiersFeature, formaterMutants, incrementalReutilisable, lireAnalyseSurvivants, lireMutants, trierSurvivants, type AnalyseSurvivants, type FichierMutation } from '../lib/mutation.ts';
 import { lirePlan } from '../lib/plan.ts';
 import { terminer } from '../lib/result.ts';
 import { echecsAdmis, lireRun } from '../lib/run-etat.ts';
@@ -200,15 +200,14 @@ async function lancerStryker(ctx: Contexte, fichiers: string[]): Promise<{ resul
 function codeDesFeatures(ctx: Contexte): Map<string, string[]> {
   const plan = lirePlan(readFileSync(join(ctx.dossier, 'plan.md'), 'utf8')).plan?.taches ?? [];
   const run = lireRun(ctx.dossier);
-  const parFichier = new Map<string, string[]>();
-  for (const t of plan.filter((x) => x.type === 'feature')) {
-    const commit = run.taches[t.id]?.commit;
-    if (!commit) continue;
-    for (const f of git(['-c', 'core.quotePath=false', 'show', '--name-only', '--format=', commit], ctx.racine).split(/\r?\n/).filter(Boolean)) {
-      parFichier.set(f, [...new Set([...(parFichier.get(f) ?? []), ...t.exigences])]);
-    }
-  }
-  return parFichier;
+  return exigencesDesFichiersFeature(
+    plan.flatMap((t) => {
+      const commit = run.taches[t.id]?.commit;
+      if (!commit) return [];
+      const fichiers = git(['-c', 'core.quotePath=false', 'show', '--name-only', '--format=', commit], ctx.racine).split(/\r?\n/).filter(Boolean);
+      return [{ type: t.type, exigences: t.exigences, fichiers }];
+    }),
+  );
 }
 
 async function analyser(ctx: Contexte, f: FichierMutation, exigences: string[]): Promise<{ analyse: AnalyseSurvivants; brut: string }> {

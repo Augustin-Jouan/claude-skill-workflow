@@ -58,6 +58,20 @@ export function choisirAnalyses(fichiers: FichierMutation[], fichiersFeature: st
   return { analyses, autres: parSurvivants.filter((f) => !analyses.includes(f)) };
 }
 
+// Fichiers touchés par les tâches feature, avec les exigences de toutes les tâches qui les touchent : l'analyse
+// porte sur toutes les lignes changées du fichier, y compris celles d'une tâche fix ou refactor.
+export function exigencesDesFichiersFeature(taches: Array<{ type: string; exigences: string[]; fichiers: string[] }>): Map<string, string[]> {
+  const parFichier = new Map<string, string[]>();
+  for (const t of taches.filter((x) => x.type === 'feature')) for (const f of t.fichiers) parFichier.set(f, []);
+  for (const t of taches) {
+    for (const f of t.fichiers) {
+      const exigences = parFichier.get(f);
+      if (exigences) parFichier.set(f, [...new Set([...exigences, ...t.exigences])]);
+    }
+  }
+  return parFichier;
+}
+
 // Les ids de Stryker changent d'un run à l'autre : un mutant se reconnaît à sa place et à son effet.
 export function cleMutant(fichier: string, m: Mutant): string {
   return `${fichier}:${m.ligne}:${m.mutateur}:${m.remplacement}`;

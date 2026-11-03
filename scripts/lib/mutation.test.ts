@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { choisirAnalyses, cleMutant, configStryker, formaterMutants, incrementalReutilisable, lireAnalyseSurvivants, lireMutants, trierSurvivants } from './mutation.ts';
+import { choisirAnalyses, cleMutant, configStryker, exigencesDesFichiersFeature, formaterMutants, incrementalReutilisable, lireAnalyseSurvivants, lireMutants, trierSurvivants } from './mutation.ts';
 
 const RAPPORT = {
   files: {
@@ -102,4 +102,16 @@ test("les résultats incrémentaux de Stryker ne sont gardés que si seul le cod
   assert.equal(incrementalReutilisable(['src/aide.ts'], ['src/a.ts']), false);
   // Pas de trace du run précédent : on ne sait pas ce qui a changé.
   assert.equal(incrementalReutilisable(null, ['src/a.ts']), false);
+});
+
+test("un fichier feature retouché par une tâche fix reçoit aussi l'exigence du fix : ses lignes changées sont toutes analysées", () => {
+  // Essai AVI : T1 (feature, EX-1) et T2 (fix, EX-2) changent opinion.service.ts ; les tests proposés sur le code de T2 portaient le nom EX-1.
+  const parFichier = exigencesDesFichiersFeature([
+    { type: 'feature', exigences: ['EX-1'], fichiers: ['src/service.ts', 'src/route.ts'] },
+    { type: 'fix', exigences: ['EX-2'], fichiers: ['src/service.ts', 'src/stats.ts'] },
+  ]);
+  assert.deepEqual([...parFichier], [
+    ['src/service.ts', ['EX-1', 'EX-2']],
+    ['src/route.ts', ['EX-1']],
+  ]);
 });
