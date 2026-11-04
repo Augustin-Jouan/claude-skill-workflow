@@ -12,6 +12,7 @@ const COMMANDES: Record<string, string> = {
   'run-plan': 'Exécute les tâches du plan (orchestrateur)',
   answer: 'Enregistre la réponse à une question de run-plan',
   verify: "Script de vérification d'une tâche",
+  tests: "Lance des fichiers de test comme verify et résume le résultat (pour l'exécuteur)",
   trace: 'Contrôle que chaque EX-n apparaît dans un nom de test',
   finish: 'Contrôles de fin de branche',
   executer: "Enchaîne run-plan, le passage à l'étape fin et finish ; s'arrête aux décisions du développeur",

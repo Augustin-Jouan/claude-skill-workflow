@@ -30,7 +30,7 @@ import { photographier, restaurer, zonesProtegees } from '../lib/protection.ts';
 import { ordreTaches } from '../lib/regles-plan.ts';
 import { lireDecision, lireRemontee, type Decision } from '../lib/reponses-llm.ts';
 import { localiser, terminer, type Resultat } from '../lib/result.ts';
-import { depassement, echecsAdmis, ecrireRun, estJalon, lireRun, nouvelleTache, suiteLente, tempsRestantMs, type Attente, type EtatRun } from '../lib/run-etat.ts';
+import { depassement, echecsAdmis, ecrireRun, empreinteTache, estJalon, etatPourVersion, lireRun, nouvelleTache, suiteLente, tempsRestantMs, type Attente, type EtatRun } from '../lib/run-etat.ts';
 import { binaireLocal, corrigerFichiers, detecterRunner, lancerTests, type Runner } from '../lib/runner.ts';
 import { conditionsDeSortie } from '../lib/sortie.ts';
 import { sectionsExigences } from '../lib/spec.ts';
@@ -57,6 +57,9 @@ function cheminLisible(racine: string, fichier: string): string {
   const r = relative(racine, fichier);
   return r.startsWith('..') || isAbsolute(r) ? fichier : r.replaceAll('\\', '/');
 }
+
+// Liste des fichiers verrouillés donnée à l'exécuteur et à l'arbitre.
+const VERROUILLES = CONFIG.verrouilles.map((v) => `\`${v}\``).join(', ');
 
 function empreinte(fichier: string): string {
   return createHash('sha256').update(readFileSync(fichier)).digest('hex');
@@ -142,7 +145,8 @@ function reprendre(ctx: Contexte): void {
     afficher('Le plan a changé depuis la question : elle est caduque, la tâche reprend de zéro.');
     const ancienne = a.tache ? ctx.run.taches[a.tache] : undefined;
     // Compteurs de décision remis à zéro ; tentatives, temps et appels déjà consommés restent (fichiers llm/ et budget).
-    if (a.tache && ancienne) ctx.run.taches[a.tache] = { ...nouvelleTache(), tentatives: ancienne.tentatives, dureeMs: ancienne.dureeMs, appelsLlm: ancienne.appelsLlm };
+    // L'empreinte reste : si la tâche elle-même a été réécrite, executerTache remet aussi son budget à zéro.
+    if (a.tache && ancienne) ctx.run.taches[a.tache] = { ...nouvelleTache(), tentatives: ancienne.tentatives, dureeMs: ancienne.dureeMs, appelsLlm: ancienne.appelsLlm, empreinte: ancienne.empreinte };
     // Un jalon rouge replanifié n'est pas revérifié : la tâche corrective est suivie d'un nouveau jalon.
     if (a.motif === 'jalon' && a.tache) ctx.run.jalonsVerifies.push(a.tache);
     journal(ctx, { type: 'replanification', tache: a.tache, motif: a.motif });
@@ -203,8 +207,11 @@ function promptExecuteur(ctx: Contexte, t: Tache, consigne: string | null): stri
       tache_yaml: stringify([t]).trimEnd(),
       exigences: sectionsExigences(ctx.spec, t.exigences) || t.exigences.join(', '),
       rapport_rejet: consigne ?? 'Aucun : première tentative.',
-      fichiers_verrouilles: CONFIG.verrouilles.map((v) => `\`${v}\``).join(', '),
+      fichiers_verrouilles: VERROUILLES,
       typecheck: consigneTypecheck(ctx.racine),
+      // « node » nu, pas process.execPath : un chemin entre guillemets en tête de commande ne s'exécute pas sous
+      // PowerShell (il faudrait &), et le shell de Cursor n'est pas connu d'avance.
+      commande_tests: `node "${WF}" tests`,
     }),
     relative(ctx.racine, ctx.dossier).replaceAll('\\', '/'),
   );
@@ -364,6 +371,7 @@ async function arbitrer(ctx: Contexte, t: Tache, motif: MotifArbitre, rapport: s
     tache_yaml: stringify([t]).trimEnd(),
     rapport: consigne ? `${rapport}\n\nConsigne donnée à l'exécuteur pour cette tentative :\n${consigne}` : rapport,
     extraits_diff: extraitsDiff(ctx, rapport),
+    fichiers_verrouilles: VERROUILLES,
   });
   const debut = Date.now();
   let r;
@@ -498,7 +506,12 @@ async function bisect(ctx: Contexte, commits: string[], regressions: string[]): 
 
 async function executerTache(ctx: Contexte, t: Tache): Promise<void> {
   const seuil = CONFIG.seuils.rejetsAvantArbitre;
-  ctx.run.taches[t.id] ??= nouvelleTache();
+  const avant = ctx.run.taches[t.id];
+  ctx.run.taches[t.id] = etatPourVersion(avant, empreinteTache(t));
+  if (avant?.empreinte !== undefined && avant.empreinte !== ctx.run.taches[t.id].empreinte) {
+    afficher(`${t.id} a été réécrite dans le plan : budget de tâche remis à zéro (${Math.round(avant.dureeMs / 60_000)} min déjà passées restent comptées pour la branche).`);
+    journal(ctx, { type: 'tache-reecrite', tache: t.id, dureeMs: avant.dureeMs });
+  }
   ctx.run.enCours = t.id;
   sauver(ctx);
   if (t.type === 'refactor' && !ctx.run.taches[t.id].couvertureVerifiee) verifierCouverture(ctx, t);

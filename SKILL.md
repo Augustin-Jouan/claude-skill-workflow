@@ -29,7 +29,7 @@ La dernière ligne de sortie, `WF_RESULT {...}`, donne le détail en JSON. Un co
 1. `wf state`. Si un workflow est en cours sur cette branche, annonce l'étape et reprends-la.
 2. Sinon, choisis le parcours avec l'utilisateur selon `references/parcours.md`, propose un nom court, puis `wf setup --parcours <micro|court|complet> --slug <nom>`.
 
-`wf audit` et `wf executer` se lancent en arrière-plan (`run_in_background`). Leur sortie montre en direct ce que fait Cursor (lignes `┊`) : c'est pour l'utilisateur, qui la suit dans le détail du shell, ou avec `wf suivre` dans un autre terminal. À leur notification, lis la sortie sans ces lignes : `grep -v '^  ┊' <fichier de sortie> | tail -n 40`. Le verdict est la dernière ligne, `WF_RESULT`. Ne lis jamais le direct : il coûterait des jetons pour rien.
+`wf audit` et `wf executer` se lancent en arrière-plan (`run_in_background`), tels quels : aucune redirection (`>`, `2>&1`, `| tee`, `| tail`). Leur sortie montre en direct ce que fait Cursor (lignes `┊`) : c'est pour l'utilisateur, qui la suit dans le détail du shell, ou avec `wf suivre` dans un autre terminal. Redirigée, elle part dans un fichier qu'il ne voit pas. À leur notification, lis le fichier de sortie que l'outil t'indique, sans ces lignes : `grep -v '^  ┊' <fichier de sortie> | tail -n 40`. Le verdict est la dernière ligne, `WF_RESULT`. Ne lis jamais le direct : il coûterait des jetons pour rien.
 
 Chaque branche `wf/<slug>` a son dossier `.workflow/<slug>/`, que `wf state` affiche. Dans ce skill et ses références, `.workflow/spec.md` veut dire `.workflow/<slug>/spec.md`, et ainsi de suite ; les messages de `wf` donnent déjà le chemin complet. Ne touche pas aux dossiers des autres branches.
 
@@ -58,8 +58,13 @@ Lance `wf executer` en arrière-plan (`run_in_background`) et attends sa notific
 - Code 0 : passe à l'étape 7.
 
 ### 7. Revue finale
-Présente le résumé que `wf executer` a rendu, tel quel, avec le chemin `.workflow/fin.md`. N'ouvre `fin.md` que pour la partie que l'utilisateur demande (review, journal). 🛑 Revue finale.
-Si l'utilisateur retient des écarts de la review : `wf state revenir plan --note "..."`, ajoute une tâche (feature avec `comportement_existant: true` pour des tests sur du code déjà écrit), puis les étapes 3 à 6. Quand il valide : `wf state avancer --note "..."`. Tu ne pousses rien et tu n'ouvres pas de PR sans demande explicite.
+Présente le résumé que `wf executer` a rendu, tel quel, avec le chemin `.workflow/fin.md`. N'ouvre `fin.md` que pour la partie que l'utilisateur demande (review, journal, liste de suivi). 🛑 Revue finale.
+- Verdict `conforme` ou `écarts mineurs` : la branche est validable. Les écarts mineurs sont dans la liste de suivi de `fin.md`. Ils ne se corrigent pas dans cette branche, sauf si l'utilisateur le demande.
+- Un seul tour de correction. Si l'utilisateur retient des écarts, regroupe-les tous en **une** tâche : `wf state revenir plan --note "..."`, ajoute la tâche (feature avec `comportement_existant: true` pour des tests sur du code déjà écrit), `wf check-plan`, puis `wf state avancer` sans relancer d'audit du plan (le tri précédent reste valable), étape 5 (matrice) et étape 6. Le `finish` suivant ne relit que le diff de cette correction.
+- Après ce tour, ne propose pas d'autre correction : ce qui reste est dans la liste de suivi. Un nouveau tour seulement si l'utilisateur le demande explicitement.
+- Exception : `écarts bloquants` après le tour de correction. La branche n'est pas validable. Montre ces écarts à l'utilisateur ; c'est lui qui choisit entre une nouvelle correction et l'abandon de la branche.
+- Nouvelles exigences (pas une correction) : `wf state revenir spec`. La spec ayant changé, le `finish` suivant refait une review de toute la branche.
+Quand il valide : `wf state avancer --note "..."`. Tu ne pousses rien et tu n'ouvres pas de PR sans demande explicite.
 
 ### 8. Bilan du workflow
 Une fois l'étape `termine` atteinte, lance `wf bilan` et montre `.workflow/bilan.md` en entier, avec le chemin de sa copie dans le dossier des retours. Ce sont des propositions pour améliorer le workflow : tu n'en appliques aucune, ni au skill ni au projet, sans demande explicite. Code 2 : montre le message ; la branche reste terminée.
@@ -81,6 +86,8 @@ Une fois l'étape `termine` atteinte, lance `wf bilan` et montre `.workflow/bila
 | « l'utilisateur a déjà validé quelque chose de proche » | Chaque 🛑 est un nouvel arrêt. |
 | « je corrige le code moi-même, ce sera plus rapide » | Étape 6 : seul l'exécuteur de `wf executer` touche au code. |
 | « je lis toute la sortie de l'audit ou d'executer » | Le direct de Cursor est pour l'utilisateur : `grep -v '^  ┊'` puis `tail -n 40`. |
+| « je redirige la sortie dans un fichier, ce sera plus propre » | L'utilisateur ne voit plus Cursor travailler. Lance la commande telle quelle. |
+| « la review a encore trouvé des écarts mineurs, j'ajoute des tâches » | Écarts mineurs = branche validable, liste de suivi. Un seul tour de correction, en une tâche. |
 | « je lis fin.md en entier pour bien présenter » | Le résumé de `wf executer` suffit ; le reste à la demande. |
 | « je lis l'audit et j'avance » | Tri complet et journalisé. Des rejets : montrés, arrêt. |
 | « aucun rejet, mais je demande quand même » | Rien à trancher : applique, journalise, annonce, enchaîne. |

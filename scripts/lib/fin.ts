@@ -52,6 +52,62 @@ export function lireVerdictReview(texte: string): string | null {
   return VERDICTS.find((v) => valeur.startsWith(v)) ?? null;
 }
 
+// Contenu de la section « ## Écarts » de la review, null si elle est absente ou vide.
+export function sectionEcarts(texte: string): string | null {
+  const lignes = texte.split(/\r?\n/);
+  const debut = lignes.findIndex((l) => /^##\s+[ÉE]carts\s*$/i.test(l.trim()));
+  if (debut < 0) return null;
+  const fin = lignes.findIndex((l, i) => i > debut && /^##\s/.test(l.trim()));
+  const contenu = lignes.slice(debut + 1, fin < 0 ? undefined : fin).join('\n').trim();
+  return contenu === '' ? null : contenu;
+}
+
+// Dernière review neuve passée (.workflow/review.json) : la suivante ne relit que les corrections faites depuis.
+export interface DerniereReview {
+  head: string;
+  tour: number;
+  // Commit à partir duquel cette review a lu le diff ; null : toute la branche.
+  depuis: string | null;
+  ecarts: string | null;
+  // Écarts de la review du tour précédent, donnés à celle-ci comme ce qui devait être corrigé.
+  precedents: string | null;
+  // Empreinte de spec.md lue par cette review ; absente pour une review déduite d'un ancien fin.json.
+  spec?: string;
+}
+
+export interface PorteeReview {
+  tour: number;
+  depuis: string | null;
+  precedents: string | null;
+}
+
+// Une branche dont la review a eu lieu avant review.json : la dernière review se déduit du dernier finish réussi.
+export function lireDerniereReview(dossier: string): DerniereReview | null {
+  const chemin = join(dossier, 'review.json');
+  if (existsSync(chemin)) return JSON.parse(readFileSync(chemin, 'utf8')) as DerniereReview;
+  const fin = lireFin(dossier);
+  if (!fin?.ok || fin.verdict === null) return null;
+  const md = join(dossier, 'fin.md');
+  const ecarts = existsSync(md) ? sectionEcarts(readFileSync(md, 'utf8')) : null;
+  return { head: fin.head, tour: 1, depuis: null, ecarts, precedents: null };
+}
+
+export function ecrireDerniereReview(dossier: string, review: DerniereReview): void {
+  writeFileSync(join(dossier, 'review.json'), `${JSON.stringify(review, null, 2)}\n`);
+}
+
+// Tour 1 : toute la branche. Ensuite, seulement les commits faits depuis la review précédente, si elle est
+// dans l'historique de HEAD ; un historique réécrit repart sur toute la branche. Sans nouveau commit, la
+// relance garde la portée de la review précédente. Une spec modifiée depuis (revenir spec : nouvelles
+// exigences, pas une correction) repart aussi sur toute la branche.
+export function porteeReview(derniere: DerniereReview | null, head: string, spec: string, estAncetre: (commit: string) => boolean): PorteeReview {
+  if (!derniere) return { tour: 1, depuis: null, precedents: null };
+  if (derniere.spec !== undefined && derniere.spec !== spec) return { tour: 1, depuis: null, precedents: null };
+  if (derniere.head === head) return { tour: derniere.tour, depuis: derniere.depuis, precedents: derniere.precedents };
+  if (estAncetre(derniere.head)) return { tour: derniere.tour + 1, depuis: derniere.head, precedents: derniere.ecarts };
+  return { tour: 1, depuis: null, precedents: null };
+}
+
 type Ligne = Record<string, unknown>;
 
 function liste(elements: string[], vide: string): string {

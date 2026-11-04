@@ -1,9 +1,11 @@
 // État de l'exécution : .workflow/run.json, tenu par run-plan seul (fichier protégé pendant l'exécuteur).
 // Tâches committées, tentatives, rejets, budget consommé, question en attente, état initial de la suite.
 
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Parcours } from './etat.ts';
+import type { Tache } from './plan.ts';
 
 export type MotifQuestion = 'budget-tache' | 'budget-branche' | 'rejets' | 'arbitre' | 'remontee' | 'couverture' | 'commit' | 'jalon';
 
@@ -19,6 +21,8 @@ export interface EtatTache {
   consigne: string | null;
   couvertureVerifiee: boolean;
   commit?: string;
+  // Empreinte de la tâche dans le plan : si elle change, la tâche a été réécrite (etatPourVersion).
+  empreinte?: string;
 }
 
 export interface Attente {
@@ -68,6 +72,34 @@ export function nouveauRun(): EtatRun {
 
 export function nouvelleTache(): EtatTache {
   return { statut: 'en-cours', tentatives: 0, rejets: 0, arbitreRejets: false, remontees: 0, dureeMs: 0, appelsLlm: 0, consigne: null, couvertureVerifiee: false };
+}
+
+// Tâche réécrite dans le plan : nouvelle tâche, avec un budget de temps neuf. Le temps passé reste compté
+// dans celui de la branche ; tentatives et appels restent (numérotation des fichiers llm/). Un état sans
+// empreinte vient d'un run.json antérieur : il adopte la version courante sans rien remettre à zéro.
+// La consigne (réponse du développeur, dernier rapport de rejet) est gardée : elle explique souvent la réécriture.
+export function etatPourVersion(et: EtatTache | undefined, empreinte: string): EtatTache {
+  if (!et) return { ...nouvelleTache(), empreinte };
+  if (et.empreinte === undefined) return { ...et, empreinte };
+  if (et.empreinte === empreinte || et.statut === 'commitee') return et;
+  return { ...nouvelleTache(), tentatives: et.tentatives, appelsLlm: et.appelsLlm, consigne: et.consigne, empreinte };
+}
+
+// Empreinte de ce que la tâche demande, champ par champ : un champ ajouté au format par une mise à jour du
+// skill ne fait pas passer toutes les tâches en cours pour réécrites.
+export function empreinteTache(t: Tache): string {
+  const contenu = {
+    id: t.id,
+    type: t.type,
+    difficulte: t.difficulte,
+    e2e: t.e2e,
+    exigences: t.exigences,
+    depends_on: t.depends_on,
+    fichiers_prevus: t.fichiers_prevus,
+    tests: t.tests.map((x) => ({ nom: x.nom, assertions: x.assertions, comportement_existant: x.comportement_existant })),
+    tests_modifiables: t.tests_modifiables.map((m) => ({ fichier: m.fichier, raison: m.raison })),
+  };
+  return createHash('sha256').update(JSON.stringify(contenu)).digest('hex');
 }
 
 export function lireRun(dossier: string): EtatRun {

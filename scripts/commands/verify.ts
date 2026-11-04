@@ -1,7 +1,7 @@
 // wf verify --task <id> — script de vérification d'une tâche, lancé après l'exécuteur, avant le commit.
 // Contrôle les changements de l'arbre de travail par rapport à HEAD : fichiers verrouillés, tests existants
 // (AST), règles de code verrouillées sur les lignes modifiées, lint du projet, tests prévus présents et verts
-// dans le reporter JSON (un échec est relancé une fois), puis, pour un fix, contrôle « rouge » :
+// dans le rapport JSON de vitest, jest ou Playwright (un échec est relancé une fois), puis, pour un fix, contrôle « rouge » :
 // les tests de régression doivent échouer sur une assertion quand on les lance sur le code de HEAD.
 // Code 0 accepté, 1 rejeté (rapport), 3 accepté avec signalements à faire trancher.
 
@@ -14,16 +14,20 @@ import { CODE_SOURCE, type Constat } from '../lib/constat.ts';
 import { dossierWorkflow, racineDepot } from '../lib/depot.ts';
 import { lireChangements } from '../lib/diff.ts';
 import { lireEtat } from '../lib/etat.ts';
+import { normaliserNomTest } from '../lib/nom-test.ts';
 import { lirePlan } from '../lib/plan.ts';
 import { terminer } from '../lib/result.ts';
 import { jugerRouge, nouveauxTitres } from '../lib/rouge.ts';
 import {
   binaireLocal,
   configEslintPresente,
-  detecterRunner,
   filtrerEslint,
   lancerEslint,
   lancerTests,
+  lancerTestsDuProjet,
+  lecteurProjet,
+  repartirFichiers,
+  runnerDuProjet,
   verifierTestsPrevus,
 } from '../lib/runner.ts';
 import { conditionsDeSortie } from '../lib/sortie.ts';
@@ -81,21 +85,16 @@ export async function run(args: string[]): Promise<void> {
     }
 
     if (tache.tests.length > 0) {
-      const pkg = join(racine, 'package.json');
-      const runner = existsSync(pkg) ? detecterRunner(JSON.parse(readFileSync(pkg, 'utf8'))) : null;
-      if (!runner) {
-        terminer({ statut: 'ERREUR_OUTIL', commande: C, message: 'Ni vitest ni jest dans les dépendances du projet : impossible de vérifier les tests prévus.' });
-      }
-      const binaire = binaireLocal(racine, runner);
-      if (!binaire) terminer({ statut: 'ERREUR_OUTIL', commande: C, message: `${runner} est déclaré mais absent de node_modules : lance l'installation du projet.` });
-
+      // Fichiers Playwright (ils importent @playwright/test) lancés par Playwright, les autres par vitest ou jest.
       const fichiers = tache.fichiers_prevus.filter(estFichierDeTestCode);
       const noms = tache.tests.map((t) => t.nom);
-      const sortie = join(dossier, 'rapports', `${id}-tests.json`);
-      let resultat = verifierTestsPrevus(noms, fichiers, lancerTests(racine, runner, binaire, fichiers, sortie));
+      const sortie = join(dossier, 'rapports', `${id}-tests`);
+      let rapport = lancerTestsDuProjet(racine, fichiers, sortie);
+      let resultat = verifierTestsPrevus(noms, fichiers, rapport);
       if (resultat.some((c) => c.regle === 'test-prevu-echec')) {
         // Un échec est relancé une fois ; un test qui passe à la relance est noté instable.
-        const relance = verifierTestsPrevus(noms, fichiers, lancerTests(racine, runner, binaire, fichiers, sortie));
+        rapport = lancerTestsDuProjet(racine, fichiers, sortie);
+        const relance = verifierTestsPrevus(noms, fichiers, rapport);
         const titre = (c: Constat) => c.message.split('\n')[0];
         const instables = resultat.filter((c) => c.regle === 'test-prevu-echec' && !relance.some((r) => titre(r) === titre(c)));
         for (const c of instables) {
@@ -109,16 +108,27 @@ export async function run(args: string[]): Promise<void> {
         if (resultat.length > 0) {
           notes.push('Contrôle « rouge » non lancé : les tests prévus ne passent pas sur le nouveau code.');
         } else {
-          const testsDeLaTache = changements.filter((c) => estFichierDeTest(c.chemin, CONFIG.fichiersTest)).map((c) => c.chemin);
-          const nouveaux = changements
-            .filter((c) => estFichierDeTestCode(c.chemin) && c.apres !== null)
-            .flatMap((c) => nouveauxTitres(c.avant, c.apres ?? '', c.chemin));
-          try {
-            preparerArbreAncien(racine, arbre, testsDeLaTache);
-            const ancien = lancerTests(arbre, runner, binaire, fichiers, join(dossier, 'rapports', `${id}-rouge.json`));
-            constats.push(...jugerRouge(tache.tests, fichiers, ancien, nouveaux));
-          } finally {
-            supprimerArbreAncien(racine, arbre);
+          // Le contrôle rouge ne lance que le runner unitaire : un test Playwright sur l'ancien code demanderait
+          // de servir l'ancienne application. Les tests de régression Playwright n'y sont donc pas jugés.
+          const unitaires = repartirFichiers(fichiers, lecteurProjet(racine)).unitaires;
+          const dansUnitaires = (nom: string) => rapport.tests.some((r) => unitaires.includes(r.fichier) && normaliserNomTest(r.titre) === normaliserNomTest(nom));
+          // Les tests comportement_existant restent passés : jugerRouge s'en sert pour ne pas les compter comme ajoutés hors plan.
+          const jugeables = tache.tests.filter((t) => t.comportement_existant || dansUnitaires(t.nom));
+          if (!jugeables.some((t) => !t.comportement_existant)) {
+            notes.push('Contrôle « rouge » non lancé : les tests de régression de ce fix sont des tests Playwright.');
+          } else {
+            const { runner, binaire } = runnerDuProjet(racine);
+            const testsDeLaTache = changements.filter((c) => estFichierDeTest(c.chemin, CONFIG.fichiersTest)).map((c) => c.chemin);
+            const nouveaux = changements
+              .filter((c) => estFichierDeTestCode(c.chemin) && c.apres !== null)
+              .flatMap((c) => nouveauxTitres(c.avant, c.apres ?? '', c.chemin));
+            try {
+              preparerArbreAncien(racine, arbre, testsDeLaTache);
+              const ancien = lancerTests(arbre, runner, binaire, unitaires, join(dossier, 'rapports', `${id}-rouge.json`));
+              constats.push(...jugerRouge(jugeables, unitaires, ancien, nouveaux));
+            } finally {
+              supprimerArbreAncien(racine, arbre);
+            }
           }
         }
       }

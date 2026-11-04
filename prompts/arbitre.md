@@ -20,6 +20,12 @@ Motif de l'appel : {{motif}}
 
 Les extraits ne montrent que les lignes changées. Le dépôt est ton dossier de travail, dans l'état laissé par l'exécuteur : lis avec Read, Grep et Glob le code et les tests cités par le rapport, au lieu de supposer leur contenu. N'écris pas d'appel d'outil dans ta réponse : elle ne contient que le JSON ci-dessous.
 
+## Fichiers verrouillés
+
+Personne dans le workflow ne peut les modifier, ni l'exécuteur ni le pilote : {{fichiers_verrouilles}}. Un motif « fichier#champ » ne verrouille que ce champ.
+
+Ne demande jamais de modifier l'un d'eux : ni dans la raison d'un rejet, ni dans une option de question. Si la seule issue passe par un fichier verrouillé, pose une `question` qui le dit : le développeur le modifiera lui-même, hors workflow.
+
 ## Ta décision
 
 - `accepter` : chaque signalement est justifié dans ce contexte.

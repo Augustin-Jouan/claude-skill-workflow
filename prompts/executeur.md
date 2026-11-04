@@ -30,6 +30,7 @@ Tu implémentes une seule tâche d'un plan validé. Un script vérifie ton trava
 - Ne touche qu'aux fichiers de `fichiers_prevus`.
 - Ne commite pas : le script le fait.
 - {{typecheck}}
+- Pour lancer des tests, utilise `{{commande_tests}} <fichiers de test>` : il les lance comme le script de vérification (Playwright compris) et rend un résumé court. Ne lance pas `npx jest`, `npx vitest` ou `npx playwright` toi-même : un test qui laisse une opération ouverte peut les bloquer plusieurs minutes.
 
 ## Ce qui fait rejeter la tâche
 

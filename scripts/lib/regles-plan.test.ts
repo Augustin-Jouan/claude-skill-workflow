@@ -145,3 +145,25 @@ test("l'ordre suit les dépendances et garde l'ordre du plan sinon", () => {
 test("l'ordre est null en cas de cycle", () => {
   assert.equal(ordreTaches([tache('T1', { depends_on: ['T2'] }), tache('T2', { depends_on: ['T1'] })]), null);
 });
+
+const VERROUILLES = ['tsconfig*.json', 'jest.config.*', 'package.json#scripts', '.github/**'];
+
+test('refuse un fichier verrouillé dans fichiers_prevus', () => {
+  const p = plan([tache('T1', { fichiers_prevus: ['src/x.ts', 'jest.config.js', '.github/workflows/ci.yml'] }), tache('T2', { exigences: ['EX-2'], e2e: true })]);
+  const v = verifierPlan(SPEC, p, null, { verrouilles: VERROUILLES });
+  assert.deepEqual(v.map((x) => `${x.regle}:${x.tache}`), ['fichier-verrouille:T1', 'fichier-verrouille:T1']);
+  assert.match(v[0].message, /jest\.config\.js/);
+  // Tâche déjà committée (plan écrit avant la règle) : pas jugée, elle ne se réécrit plus.
+  assert.deepEqual(verifierPlan(SPEC, p, null, { verrouilles: VERROUILLES, commitees: ['T1'] }), []);
+});
+
+test("package.json reste prévisible : seul son champ scripts est verrouillé, verify le contrôle", () => {
+  const p = plan([tache('T1', { fichiers_prevus: ['package.json', 'src/x.ts'] }), tache('T2', { exigences: ['EX-2'], e2e: true })]);
+  assert.deepEqual(verifierPlan(SPEC, p, null, { verrouilles: VERROUILLES }), []);
+});
+
+test("refuse une tâche e2e: true quand le projet n'a aucun lanceur que verify sait lancer", () => {
+  assert.deepEqual(verifierPlan(SPEC, CONFORME, null, { lanceurs: [] }).map((x) => `${x.regle}:${x.tache}`), ['e2e-non-verifiable:T2']);
+  assert.deepEqual(verifierPlan(SPEC, CONFORME, null, { lanceurs: ['playwright'] }), []);
+  assert.deepEqual(verifierPlan(SPEC, plan([tache('T1'), tache('T2', { exigences: ['EX-2'] })], 'court', 'API seule'), null, { lanceurs: [] }), []);
+});

@@ -1,6 +1,6 @@
 // wf setup --parcours <micro|court|complet> --slug <nom> [--worktree]
 // Crée la branche, exclut .workflow/ de git localement et initialise l'état dans .workflow/<slug>/.
-// Rien n'est écrit dans un fichier versionné du dépôt.
+// Rien n'est écrit dans un fichier versionné du dépôt. Refuse un projet où verify ne pourrait pas lancer les tests.
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -8,6 +8,7 @@ import { CONFIG } from '../../config/defaults.ts';
 import { lireArguments, texte } from '../lib/args.ts';
 import { dossierWorkflow, git, messageGit, racineDepot } from '../lib/depot.ts';
 import { ecrireEtat, lireEtat, PARCOURS, type Parcours } from '../lib/etat.ts';
+import { controlerProjet } from '../lib/projet.ts';
 import { nonImplemente, terminer } from '../lib/result.ts';
 
 const C = 'setup';
@@ -32,6 +33,11 @@ export async function run(args: string[]): Promise<void> {
   const dossier = dossierWorkflow(racine, branche);
   if (lireEtat(dossier)) {
     terminer({ statut: 'ECHEC', commande: C, message: `Un workflow existe déjà pour ${branche} (.workflow/${slug}/) : choisis un autre slug.` });
+  }
+
+  const problemes = controlerProjet(racine);
+  if (problemes.length > 0) {
+    terminer({ statut: 'ECHEC', commande: C, message: `Le projet n'est pas prêt pour le workflow :\n${problemes.map((p) => `- ${p}`).join('\n')}\n\nCorrige, puis relance « wf setup ».` });
   }
 
   exclureLocalement(racine);

@@ -4,12 +4,15 @@
 
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { CONFIG } from '../../config/defaults.ts';
 import { dossierWorkflow, racineDepot } from '../lib/depot.ts';
 import { lireEtat } from '../lib/etat.ts';
 import { genererMatrice } from '../lib/matrice.ts';
 import { lirePlan, type Violation } from '../lib/plan.ts';
 import { ordreTaches, verifierPlan } from '../lib/regles-plan.ts';
 import { terminer } from '../lib/result.ts';
+import { lireRun } from '../lib/run-etat.ts';
+import { lanceursDeclares } from '../lib/runner.ts';
 import { enregistrerCheckPlan } from '../lib/sortie.ts';
 import { lireSpec } from '../lib/spec.ts';
 
@@ -35,7 +38,15 @@ export async function run(_args: string[]): Promise<void> {
     ...spec.erreurs.map((message) => ({ regle: 'spec', message })),
     ...lecture.violations,
   ];
-  if (lecture.plan) violations.push(...verifierPlan(spec.exigences, lecture.plan, etat.parcours));
+  const pkg = join(racine, 'package.json');
+  let lanceurs: string[] = [];
+  try {
+    lanceurs = existsSync(pkg) ? lanceursDeclares(JSON.parse(readFileSync(pkg, 'utf8'))) : [];
+  } catch (e) {
+    terminer({ statut: 'ECHEC', commande: C, message: `package.json illisible : ${e instanceof Error ? e.message : String(e)}` });
+  }
+  const commitees = Object.entries(lireRun(dossier).taches).filter(([, t]) => t.statut === 'commitee').map(([id]) => id);
+  if (lecture.plan) violations.push(...verifierPlan(spec.exigences, lecture.plan, etat.parcours, { verrouilles: CONFIG.verrouilles, lanceurs, commitees }));
 
   const matrice = join(dossier, 'matrice.md');
   if (violations.length > 0 || !lecture.plan) {

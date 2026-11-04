@@ -71,6 +71,8 @@ Chaque violation est préfixée par le nom de sa règle. Il échoue si :
 - `[raison-manquante]` une entrée de `tests_modifiables` n'a pas de raison ;
 - `[dependance-inconnue]` / `[cycle]` un `depends_on` cite une tâche inexistante ou crée un cycle ;
 - `[jalon-inconnu]` un jalon cite une tâche inexistante ;
-- `[e2e]` il n'y a aucune tâche `e2e: true`, sauf en parcours court avec un `e2e_non_applicable` justifié (règle absente en micro, dérogation interdite en complet, inutile s'il y a une tâche E2E).
+- `[e2e]` il n'y a aucune tâche `e2e: true`, sauf en parcours court avec un `e2e_non_applicable` justifié (règle absente en micro, dérogation interdite en complet, inutile s'il y a une tâche E2E) ;
+- `[e2e-non-verifiable]` une tâche `e2e: true` alors que le projet ne déclare aucun lanceur que verify sait lancer (vitest, jest, `@playwright/test`). Un fichier de test qui importe `@playwright/test`, lui-même ou par ses fixtures locales, est lancé par Playwright ;
+- `[fichier-verrouille]` un fichier de `fichiers_prevus` est verrouillé (`config/defaults.ts`) : l'exécuteur ne peut pas le modifier. `package.json` reste prévisible : seul son champ `scripts` est verrouillé, et verify le contrôle. Les tâches déjà committées ne sont pas jugées.
 
 Quand il passe, il génère `.workflow/matrice.md` (exigence → tâche(s) → test(s) → assertions, plus l'ordre d'exécution et la difficulté de chaque tâche). Tu n'écris jamais la matrice à la main. Quand il échoue, il supprime la matrice précédente. `wf state avancer` refuse de quitter les étapes plan, audit-plan et matrice tant que le dernier `check-plan` n'est pas vert sur la spec et le plan actuels.

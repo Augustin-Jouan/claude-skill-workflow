@@ -30,6 +30,8 @@ function decrire(l: Ligne): string | null {
       return `${qui} · réponse du développeur (${l.motif}) : ${l.reponse}`;
     case 'replanification':
       return `${qui} · replanification (${l.motif})`;
+    case 'tache-reecrite':
+      return `${qui} · réécrite dans le plan, budget de tâche remis à zéro après ${minutes(l.dureeMs)} min`;
     case 'regle-tranchee':
       return `${qui} · tranché par le développeur (${l.motif})`;
     case 'remontee':

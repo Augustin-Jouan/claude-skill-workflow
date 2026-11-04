@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { conditionsFin, ligneCouverture, lireVerdictReview, resumerJournal } from './fin.ts';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { conditionsFin, ecrireDerniereReview, ligneCouverture, lireDerniereReview, lireVerdictReview, porteeReview, resumerJournal, sectionEcarts } from './fin.ts';
 
 test('lireVerdictReview lit la ligne qui suit « ## Verdict »', () => {
   assert.equal(lireVerdictReview('## Verdict\nécarts mineurs\n\n## Écarts\n…'), 'écarts mineurs');
@@ -71,4 +74,55 @@ test('la couverture mesurée avant chaque refactor devient une ligne des contrô
   ]);
   assert.equal(ligne, '- Couverture avant refactor (lignes, seuil 80 %) : T1 src/duree.ts 100 % ; T2 src/duree.ts 98.5 %, src/texte.ts 72 %');
   assert.equal(ligneCouverture([{ type: 'tache', tache: 'T1' }]), null);
+});
+
+test('sectionEcarts rend le tableau des écarts de la review, sans les autres sections', () => {
+  const texte = '## Verdict\nécarts mineurs\n\n## Écarts\n| EX-1 | a.ts:3 | libellé | mineur |\n\n## Déviations contestées\n- aucune';
+  assert.equal(sectionEcarts(texte), '| EX-1 | a.ts:3 | libellé | mineur |');
+  assert.equal(sectionEcarts('## Ecarts\n\n## Fin'), null);
+  assert.equal(sectionEcarts('pas de section'), null);
+});
+
+test("sans review.json, la dernière review se déduit d'un finish réussi (fin.json et fin.md)", () => {
+  const dossier = mkdtempSync(join(tmpdir(), 'wf-fin-'));
+  try {
+    assert.equal(lireDerniereReview(dossier), null);
+    writeFileSync(join(dossier, 'fin.json'), JSON.stringify({ date: 'd', head: 'h1', ok: true, verdict: 'écarts mineurs' }));
+    writeFileSync(join(dossier, 'fin.md'), '# Fin\n\n## Review neuve (x, y)\n\n## Verdict\nécarts mineurs\n\n## Écarts\n| EX-1 | a |\n\n## Journal\n…');
+    assert.deepEqual(lireDerniereReview(dossier), { head: 'h1', tour: 1, depuis: null, ecarts: '| EX-1 | a |', precedents: null });
+    writeFileSync(join(dossier, 'fin.json'), JSON.stringify({ date: 'd', head: 'h1', ok: false, verdict: null }));
+    assert.equal(lireDerniereReview(dossier), null);
+    const review = { head: 'h2', tour: 2, depuis: 'h1', ecarts: null, precedents: '| EX-1 | a |' };
+    ecrireDerniereReview(dossier, review);
+    assert.deepEqual(lireDerniereReview(dossier), review);
+  } finally {
+    rmSync(dossier, { recursive: true, force: true });
+  }
+});
+
+test('première review : toute la branche', () => {
+  assert.deepEqual(porteeReview(null, 'h1', 's1', () => true), { tour: 1, depuis: null, precedents: null });
+});
+
+test('review suivante : seulement les corrections faites depuis la précédente', () => {
+  const derniere = { head: 'h1', tour: 1, depuis: null, ecarts: '| EX-1 | … |', precedents: null };
+  assert.deepEqual(porteeReview(derniere, 'h2', 's1', (c) => c === 'h1'), { tour: 2, depuis: 'h1', precedents: '| EX-1 | … |' });
+});
+
+test('relancer finish sans nouveau commit garde la portée de la review précédente', () => {
+  const derniere = { head: 'h2', tour: 2, depuis: 'h1', ecarts: 'e2', precedents: 'e1' };
+  assert.deepEqual(porteeReview(derniere, 'h2', 's1', () => true), { tour: 2, depuis: 'h1', precedents: 'e1' });
+});
+
+test("un historique réécrit depuis la review précédente relance une review de toute la branche", () => {
+  const derniere = { head: 'h1', tour: 1, depuis: null, ecarts: 'e1', precedents: null };
+  assert.deepEqual(porteeReview(derniere, 'h9', 's1', () => false), { tour: 1, depuis: null, precedents: null });
+});
+
+test("une spec modifiée depuis la review précédente (nouvelles exigences) relance une review de toute la branche", () => {
+  const derniere = { head: 'h1', tour: 1, depuis: null, ecarts: 'e1', precedents: null, spec: 's1' };
+  assert.deepEqual(porteeReview(derniere, 'h2', 's2', () => true), { tour: 1, depuis: null, precedents: null });
+  assert.deepEqual(porteeReview(derniere, 'h2', 's1', () => true), { tour: 2, depuis: 'h1', precedents: 'e1' });
+  // Review déduite d'un ancien fin.json : spec inconnue, pas de comparaison.
+  assert.deepEqual(porteeReview({ ...derniere, spec: undefined }, 'h2', 's2', () => true), { tour: 2, depuis: 'h1', precedents: 'e1' });
 });

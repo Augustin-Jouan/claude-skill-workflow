@@ -2,11 +2,22 @@
 // Chaque violation porte le nom de sa règle : c'est lui que les tests et le skill référencent.
 
 import type { Parcours } from './etat.ts';
+import { correspond } from './glob.ts';
 import { exigenceDuNom, normaliserNomTest } from './nom-test.ts';
 import type { Plan, Tache, Violation } from './plan.ts';
 import type { Exigence } from './spec.ts';
 
-export function verifierPlan(spec: Exigence[], plan: Plan, parcoursEtat: Parcours | null): Violation[] {
+// Ce que check-plan sait du projet. Un champ absent désactive la règle qui s'en sert.
+export interface Projet {
+  // Motifs de config/defaults.ts ; « fichier#champ » ne verrouille qu'un champ, que verify contrôle.
+  verrouilles?: readonly string[];
+  // Lanceurs de tests déclarés dans le projet et connus de verify (vitest, jest, playwright).
+  lanceurs?: string[];
+  // Tâches déjà committées (run.json) : la règle fichier-verrouille ne les juge pas.
+  commitees?: string[];
+}
+
+export function verifierPlan(spec: Exigence[], plan: Plan, parcoursEtat: Parcours | null, projet: Projet = {}): Violation[] {
   const violations: Violation[] = [];
   const v = (regle: string, message: string, tache?: string) => violations.push({ regle, message, tache });
   const { entete, taches } = plan;
@@ -36,6 +47,14 @@ export function verifierPlan(spec: Exigence[], plan: Plan, parcoursEtat: Parcour
       if (test.nom.includes('\\')) {
         v('nom-echappement', `${t.id} : « ${test.nom} » contient « \\ ». Écris le caractère en mots (CRLF, LF, tabulation…), sans séquence d'échappement.`, t.id);
       }
+    }
+    // Une tâche déjà committée (plan écrit avant cette règle) ne se réécrit plus : elle n'est pas jugée.
+    for (const f of projet.commitees?.includes(t.id) ? [] : t.fichiers_prevus) {
+      const motif = projet.verrouilles?.find((m) => !m.includes('#') && correspond(f, m));
+      if (motif) v('fichier-verrouille', `${t.id} prévoit ${f}, verrouillé (${motif}) : l'exécuteur ne peut pas le modifier. Retire-le du plan : seul le développeur modifie un fichier verrouillé.`, t.id);
+    }
+    if (t.e2e && projet.lanceurs?.length === 0) {
+      v('e2e-non-verifiable', `${t.id} : e2e: true non vérifiable, le projet ne déclare ni @playwright/test, ni vitest, ni jest. Déclare e2e_non_applicable ou installe le lanceur.`, t.id);
     }
     for (const m of t.tests_modifiables) {
       if (m.raison.trim() === '') v('raison-manquante', `${t.id} : ${m.fichier} est modifiable sans raison.`, t.id);

@@ -3,6 +3,7 @@
 // 3. review par un contexte neuf (spec, DEVIATIONS.md, diff). Écrit .workflow/fin.md et fin.json.
 // Code 0 : fin.md prêt pour la revue finale. 1 : traçabilité ou suite en échec (nouvelle tâche au plan).
 
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,7 +11,7 @@ import { CONFIG } from '../../config/defaults.ts';
 import { dossierWorkflow, fichiersDuDepot, git, gitBrut, racineDepot } from '../lib/depot.ts';
 import { lireChangements } from '../lib/diff.ts';
 import { lireEtat, type Etat } from '../lib/etat.ts';
-import { ecrireFin, ligneCouverture, lireVerdictReview, resumerJournal } from '../lib/fin.ts';
+import { ecrireDerniereReview, ecrireFin, ligneCouverture, lireDerniereReview, lireVerdictReview, porteeReview, resumerJournal, sectionEcarts, type PorteeReview } from '../lib/fin.ts';
 import { remplir } from '../lib/gabarit.ts';
 import { ajouterAuJournal } from '../lib/journal.ts';
 import { appelerLlm, type Reponse } from '../lib/llm.ts';
@@ -119,21 +120,69 @@ function controles(ctx: Contexte): { lignes: string[]; bloquants: string[] } {
 
 // --- 3 : review neuve ---
 
-async function review(ctx: Contexte): Promise<{ verdict: string | null; texte: string }> {
-  afficher('Review par un contexte neuf…');
+function estAncetre(racine: string, commit: string): boolean {
+  try {
+    git(['merge-base', '--is-ancestor', commit, 'HEAD'], racine);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+interface Review {
+  verdict: string | null;
+  texte: string;
+  portee: PorteeReview;
+  ecarts: string | null;
+}
+
+// Tour 1 : toute la branche. Tours suivants : seulement le diff des corrections depuis la review précédente.
+async function review(ctx: Contexte): Promise<Review> {
+  const spec = createHash('sha256').update(ctx.spec).digest('hex');
+  const portee = porteeReview(lireDerniereReview(ctx.dossier), ctx.head, spec, (c) => estAncetre(ctx.racine, c));
+  afficher(portee.depuis ? `Review des corrections depuis ${portee.depuis.slice(0, 8)} (tour ${portee.tour})…` : 'Review par un contexte neuf…');
   const exclus = ['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock'].map((f) => `:(exclude,glob)**/${f}`);
-  const lignes = gitBrut(['-c', 'core.quotePath=false', 'diff', ctx.base, ctx.head, '--', '.', ...exclus], ctx.racine).split('\n');
+  const lignes = gitBrut(['-c', 'core.quotePath=false', 'diff', portee.depuis ?? ctx.base, ctx.head, '--', '.', ...exclus], ctx.racine).split('\n');
   const diff = lignes.length > DIFF_MAX_LIGNES ? `${lignes.slice(0, DIFF_MAX_LIGNES).join('\n')}\n… (${lignes.length - DIFF_MAX_LIGNES} lignes coupées)` : lignes.join('\n');
   const deviations = join(ctx.dossier, 'DEVIATIONS.md');
-  const prompt = remplir(readFileSync(join(PROMPTS, 'review-neuve.md'), 'utf8'), {
+  const valeurs = {
     spec: ctx.spec,
     deviations: existsSync(deviations) ? readFileSync(deviations, 'utf8') : 'Aucune déviation consignée.',
     diff: `\`\`\`diff\n${diff}\n\`\`\``,
-  });
+  };
+  const prompt = portee.depuis
+    ? remplir(readFileSync(join(PROMPTS, 'review-corrections.md'), 'utf8'), { ...valeurs, precedents: portee.precedents ?? 'Non conservés.' })
+    : remplir(readFileSync(join(PROMPTS, 'review-neuve.md'), 'utf8'), valeurs);
   const r = await llm(ctx, prompt);
   const verdict = lireVerdictReview(r.texte);
-  journal(ctx, { type: 'review', verdict: verdict ?? 'illisible' });
-  return { verdict, texte: r.texte };
+  const ecarts = sectionEcarts(r.texte);
+  journal(ctx, { type: 'review', verdict: verdict ?? 'illisible', tour: portee.tour });
+  ecrireDerniereReview(ctx.dossier, { head: ctx.head, ...portee, ecarts, spec });
+  return { verdict, texte: r.texte, portee, ecarts };
+}
+
+// Les écarts mineurs ne bloquent pas la branche, et un seul tour de correction est fait : ce qui reste est
+// listé ici, à traiter hors de la branche si le développeur le souhaite. Des écarts bloquants après le tour de
+// correction (la correction a cassé quelque chose, ou n'a pas corrigé) ne sont pas relégués : la branche n'est
+// pas validable, le développeur décide.
+function listeDeSuivi(rv: Review): string | null {
+  if (rv.portee.tour === 1) {
+    if (rv.verdict !== 'écarts mineurs') return null;
+    return `Écarts mineurs : la branche est validable. Ils ne se corrigent pas dans cette branche, sauf demande du développeur (un seul tour de correction).\n\n${rv.ecarts ?? 'Voir la review ci-dessus.'}`;
+  }
+  const precedents = `### Écarts relevés au tour précédent\n\nLa correction en a traité tout ou partie : à recouper avec la review ci-dessus.\n\n${rv.portee.precedents ?? 'Non conservés.'}`;
+  if (rv.verdict === 'écarts bloquants') {
+    return [
+      `Écarts bloquants après le tour de correction (tour ${rv.portee.tour}) : la branche n'est pas validable. Le développeur décide : une nouvelle correction ou l'abandon de la branche.`,
+      `### Écarts de cette review\n\n${rv.ecarts ?? 'Voir la review ci-dessus.'}`,
+      precedents,
+    ].join('\n\n');
+  }
+  return [
+    `Tour de correction fait (tour ${rv.portee.tour}) : plus de nouvelle correction dans cette branche. Ce qui reste se traite hors de la branche.`,
+    `### Écarts de cette review\n\n${rv.ecarts ?? 'Aucun.'}`,
+    precedents,
+  ].join('\n\n');
 }
 
 // --- Commande ---
@@ -180,12 +229,23 @@ export async function run(): Promise<void> {
   const lignesJournal = journalBrut.split(/\r?\n/).filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>);
   const couverture = ligneCouverture(lignesJournal);
 
+  const suivi = listeDeSuivi(rv);
+  const nomReview = rv.portee.depuis ? `Review des corrections depuis ${rv.portee.depuis.slice(0, 8)} (tour ${rv.portee.tour})` : 'Review neuve (toute la branche)';
+  const issue =
+    rv.portee.tour > 1
+      ? rv.verdict === 'écarts bloquants'
+        ? ' — écarts bloquants après le tour de correction : décision du développeur'
+        : ' — tour de correction fait, ce qui reste est dans la liste de suivi'
+      : suivi
+        ? ' — branche validable, écarts dans la liste de suivi'
+        : '';
   const contenu = [
     entete,
     '## Contrôles',
-    [...lignes, ...(couverture ? [couverture] : []), `- Review neuve : ${rv.verdict ?? 'verdict illisible (voir ci-dessous)'}`].join('\n'),
-    `## Review neuve (${CONFIG.modeles.review.outil}, ${CONFIG.modeles.review.modele})`,
+    [...lignes, ...(couverture ? [couverture] : []), `- ${nomReview} : ${rv.verdict ?? 'verdict illisible (voir ci-dessous)'}${issue}`].join('\n'),
+    `## ${nomReview.replace(/ \(toute la branche\)$/, '')} (${CONFIG.modeles.review.outil}, ${CONFIG.modeles.review.modele})`,
     rv.texte.trim(),
+    ...(suivi ? ['## Liste de suivi', suivi] : []),
     '## Journal',
     resumerJournal(lignesJournal, Object.fromEntries(Object.entries(CONFIG.modeles).map(([role, m]) => [role, m.outil]))),
   ];
@@ -197,6 +257,6 @@ export async function run(): Promise<void> {
     statut: 'OK',
     commande: C,
     message: `Fin de branche prête : .workflow/fin.md (review : ${rv.verdict ?? 'illisible'}). Présente-la pour la revue finale.`,
-    details: { verdict: rv.verdict },
+    details: { verdict: rv.verdict, tour: rv.portee.tour, depuis: rv.portee.depuis },
   });
 }
