@@ -127,9 +127,10 @@ function lancer(racine: string, script: string, args: string[]) {
 }
 
 // lies : les fichiers sont du code, on lance les tests qui en dépendent (graphe d'imports du runner).
+// --forceExit : un test qui laisse une opération ouverte gardait jest en vie environ 8 min après son rapport (AVI, T29).
 export function argumentsTests(runner: Runner, fichiers: string[], sortie: string, lies: boolean): string[] {
   if (runner === 'vitest') return [lies ? 'related' : 'run', ...(lies ? ['--run'] : []), '--reporter=json', `--outputFile=${sortie}`, ...fichiers];
-  return ['--ci', '--json', `--outputFile=${sortie}`, lies ? '--findRelatedTests' : '--runTestsByPath', ...fichiers];
+  return ['--ci', '--forceExit', '--json', `--outputFile=${sortie}`, lies ? '--findRelatedTests' : '--runTestsByPath', ...fichiers];
 }
 
 export function lancerTests(racine: string, runner: Runner, binaire: string, fichiers: string[], sortie: string, lies = false): Rapport {

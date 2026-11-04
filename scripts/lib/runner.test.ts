@@ -98,6 +98,6 @@ test("ne garde du lint du projet que les erreurs situées sur les lignes modifi�
 test('argumentsTests : fichiers donnés, ou tests liés aux fichiers de code', () => {
   assert.deepEqual(argumentsTests('vitest', ['a.test.ts'], 'r.json', false), ['run', '--reporter=json', '--outputFile=r.json', 'a.test.ts']);
   assert.deepEqual(argumentsTests('vitest', ['src/a.ts'], 'r.json', true), ['related', '--run', '--reporter=json', '--outputFile=r.json', 'src/a.ts']);
-  assert.deepEqual(argumentsTests('jest', ['a.test.ts'], 'r.json', false), ['--ci', '--json', '--outputFile=r.json', '--runTestsByPath', 'a.test.ts']);
-  assert.deepEqual(argumentsTests('jest', ['src/a.ts'], 'r.json', true), ['--ci', '--json', '--outputFile=r.json', '--findRelatedTests', 'src/a.ts']);
+  assert.deepEqual(argumentsTests('jest', ['a.test.ts'], 'r.json', false), ['--ci', '--forceExit', '--json', '--outputFile=r.json', '--runTestsByPath', 'a.test.ts']);
+  assert.deepEqual(argumentsTests('jest', ['src/a.ts'], 'r.json', true), ['--ci', '--forceExit', '--json', '--outputFile=r.json', '--findRelatedTests', 'src/a.ts']);
 });
